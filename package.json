@@ -1,0 +1,17 @@
+{
+  "name": "proxy-checker",
+  "version": "1.0.0",
+  "description": "SOCKS/HTTP proxy checker via BrowserLeaks",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cheerio": "^1.0.0",
+    "express": "^4.19.2",
+    "https-proxy-agent": "^7.0.4",
+    "socks-proxy-agent": "^8.0.3"
+  }
+}

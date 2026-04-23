@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proxy Checker — BrowserLeaks</title>
+<style>
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+  --border: #30363d; --text: #c9d1d9; --dim: #8b949e;
+  --green: #3fb950; --red: #f85149; --yellow: #d29922;
+  --blue: #58a6ff; --purple: #bc8cff;
+  --r: 8px; --mono: 'SFMono-Regular',Consolas,'Liberation Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5}
+code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:1px 5px;border-radius:3px}
+/* Header */
+.hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+.hdr-logo{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
+.hdr-sub{color:var(--dim);font-size:12px;margin-left:auto}
+/* Container */
+.wrap{max-width:1700px;margin:0 auto;padding:20px 24px}
+/* Card */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:14px}
+/* Grid */
+.g2{display:grid;grid-template-columns:1fr 260px;gap:16px}
+@media(max-width:700px){.g2{grid-template-columns:1fr}}
+/* Labels */
+.lbl{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+/* Textarea */
+#proxy-input{width:100%;height:164px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-family:var(--mono);font-size:12px;padding:10px 12px;resize:vertical;outline:none;transition:border-color .15s}
+#proxy-input:focus{border-color:var(--blue)}
+/* Field */
+.field{margin-bottom:10px}
+.field label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
+.field input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:13px;padding:7px 10px;outline:none;transition:border-color .15s}
+.field input:focus{border-color:var(--blue)}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:var(--r);border:1px solid transparent;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--blue);color:#0d1117;border-color:var(--blue)}
+.btn-primary:hover{background:#79c0ff}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-danger{background:transparent;color:var(--red);border-color:var(--red)}
+.btn-danger:hover{background:rgba(248,81,73,.1)}
+.btn-danger:disabled{opacity:.4;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--dim);border-color:var(--border)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-ghost:disabled{opacity:.4;cursor:not-allowed}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+/* Progress */
+.stats-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.stat{display:flex;align-items:center;gap:5px;font-size:13px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot-blue{background:var(--blue)}.dot-green{background:var(--green)}.dot-red{background:var(--red)}.dot-yellow{background:var(--yellow)}
+.stat-n{font-weight:600;font-size:15px}
+.prog-wrap{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));border-radius:99px;transition:width .3s;width:0%}
+/* Toolbar */
+.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.fbtn{padding:3px 11px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:12px;cursor:pointer;transition:all .15s}
+.fbtn.on{background:var(--blue);border-color:var(--blue);color:#0d1117;font-weight:600}
+.fbtn:hover:not(.on){background:var(--surface2);color:var(--text)}
+.sep{flex:1}
+/* Table */
+.tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead{position:sticky;top:0;z-index:10}
+thead th{background:var(--surface2);color:var(--dim);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:9px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s;cursor:pointer}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover,tbody tr.exp{background:var(--surface2)}
+td{padding:7px 10px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+td.mono{font-family:var(--mono);font-size:11px}
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}
+.ok{background:rgba(63,185,80,.12);color:var(--green);border:1px solid rgba(63,185,80,.25)}
+.err{background:rgba(248,81,73,.12);color:var(--red);border:1px solid rgba(248,81,73,.25)}
+/* OS badge */
+.os{display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500}
+.os-win{background:rgba(88,166,255,.12);color:#79c0ff}
+.os-lin{background:rgba(210,153,34,.12);color:var(--yellow)}
+.os-and{background:rgba(63,185,80,.12);color:var(--green)}
+.os-oth{background:rgba(139,148,158,.12);color:var(--dim)}
+/* Latency */
+.lat-f{color:var(--green)}.lat-m{color:var(--yellow)}.lat-s{color:var(--red)}
+/* Detail row */
+.drow td{padding:0}
+.dcontent{padding:16px;background:#0d1117;border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.dcontent>div{min-width:0;overflow:hidden}
+.dsec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--blue);margin-bottom:7px}
+.ditem{margin-bottom:4px;min-width:0}
+.dkey{font-size:11px;color:var(--dim);white-space:nowrap}
+.dval{font-size:12px;color:var(--text);word-break:break-word;overflow-wrap:anywhere;display:inline}
+.dval.mono{font-family:var(--mono);font-size:11px}
+/* Scamalytics risk badges */
+.sc-low{color:#3fb950;font-weight:600}
+.sc-medium{color:#d29922;font-weight:600}
+.sc-high{color:#f85149;font-weight:600}
+.sc-very_high{color:#f85149;font-weight:700}
+.sc-flag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:600}
+.sc-yes{background:rgba(248,81,73,.15);color:#f85149}
+.sc-no{background:rgba(63,185,80,.1);color:#3fb950}
+.empty{text-align:center;padding:60px 20px;color:var(--dim)}
+.empty-ico{font-size:44px;margin-bottom:10px}
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#8b949e}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-logo">
+    <svg width="20" height="20" fill="#58a6ff" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+    Proxy Checker
+  </div>
+  <div class="hdr-sub">Fingerprint analysis via BrowserLeaks</div>
+</div>
+
+<div class="wrap">
+  <!-- Input panel -->
+  <div class="card">
+    <div class="g2">
+      <div>
+        <div class="lbl">
+          <span>Proxy List</span>
+          <span id="proxy-count" style="font-weight:400;font-size:11px">0 proxies</span>
+        </div>
+        <textarea id="proxy-input" placeholder="One proxy per line:&#10;127.0.0.1:1080&#10;socks5://user:pass@host:port&#10;http://host:port&#10;host:port:user:pass"></textarea>
+        <div style="margin-top:5px;font-size:11px;color:var(--dim)">
+          Supported: <code>host:port</code> &nbsp;·&nbsp; <code>socks5://host:port</code> &nbsp;·&nbsp; <code>http://user:pass@host:port</code> &nbsp;·&nbsp; <code>host:port:user:pass</code>
+        </div>
+      </div>
+      <div>
+        <div class="field">
+          <label for="concurrency">Concurrency (1–50)</label>
+          <input id="concurrency" type="number" value="5" min="1" max="50">
+        </div>
+        <div class="field">
+          <label for="timeout">Timeout (seconds)</label>
+          <input id="timeout" type="number" value="30" min="5" max="120">
+        </div>
+        <div class="btns">
+          <button id="btn-check" class="btn btn-primary" onclick="startCheck()">
+            <svg width="13" height="13" fill="currentColor" viewBox="0 0 16 16"><path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445zM8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8z"/></svg>
+            Check Proxies
+          </button>
+          <button id="btn-stop" class="btn btn-danger" onclick="stopCheck()" disabled>
+            <svg width="13" height="13" fill="currentColor" viewBox="0 0 16 16"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg>
+            Stop
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div id="prog-card" class="card" style="display:none">
+    <div class="stats-row">
+      <div class="stat"><span class="dot dot-blue"></span>Total: <span id="s-total" class="stat-n">0</span></div>
+      <div class="stat"><span class="dot dot-green"></span>OK: <span id="s-ok" class="stat-n">0</span></div>
+      <div class="stat"><span class="dot dot-red"></span>Error: <span id="s-err" class="stat-n">0</span></div>
+      <div class="stat"><span class="dot dot-yellow"></span>Pending: <span id="s-pend" class="stat-n">0</span></div>
+      <div style="margin-left:auto;font-size:12px;color:var(--dim)"><span id="s-pct">0%</span></div>
+    </div>
+    <div class="prog-wrap"><div id="prog-bar" class="prog-bar"></div></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar" style="display:none">
+    <button class="fbtn on" data-f="all"   onclick="setFilter('all')">All</button>
+    <button class="fbtn"    data-f="ok"    onclick="setFilter('ok')">✓ OK</button>
+    <button class="fbtn"    data-f="error" onclick="setFilter('error')">✗ Error</button>
+    <div class="sep"></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportCsv()">
+      <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+      Export CSV
+    </button>
+    <button class="btn btn-ghost btn-sm" onclick="clearAll()">Clear</button>
+  </div>
+
+  <!-- Table -->
+  <div class="tbl-wrap">
+    <div class="empty" id="empty">
+      <div class="empty-ico">🔍</div>
+      <div>Enter proxy list above and click <strong>Check Proxies</strong></div>
+    </div>
+    <table id="tbl" style="display:none">
+      <thead>
+        <tr>
+          <th style="width:34px">#</th>
+          <th style="min-width:160px">Proxy</th>
+          <th style="width:75px">Status</th>
+          <th style="width:72px">Latency</th>
+          <th style="min-width:120px">IP Address</th>
+          <th style="min-width:100px">Country</th>
+          <th>City</th>
+          <th style="max-width:150px">ISP</th>
+          <th style="width:85px">OS</th>
+          <th style="width:50px">MTU</th>
+          <th style="max-width:120px">Link Type</th>
+          <th style="width:155px">JA4T</th>
+          <th style="width:36px"></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+'use strict';
+let results=[], filter='all', es=null;
+
+document.getElementById('proxy-input').addEventListener('input',()=>{
+  const n=document.getElementById('proxy-input').value.split('\n').filter(l=>l.trim()).length;
+  document.getElementById('proxy-count').textContent=n+' proxies';
+});
+
+function flag(iso){
+  if(!iso||iso.length!==2)return'';
+  const b=0x1F1E6-65;
+  try{return String.fromCodePoint(b+iso.toUpperCase().charCodeAt(0),b+iso.toUpperCase().charCodeAt(1))+' ';}catch{return'';}
+}
+function osBadge(os){
+  if(!os)return'<span class="os os-oth">—</span>';
+  const l=os.toLowerCase();
+  if(l.includes('windows'))return`<span class="os os-win">${esc(os)}</span>`;
+  if(l.includes('linux'))return`<span class="os os-lin">${esc(os)}</span>`;
+  if(l.includes('android'))return`<span class="os os-and">${esc(os)}</span>`;
+  return`<span class="os os-oth">${esc(os)}</span>`;
+}
+function latCls(ms){if(!ms)return'';return ms<1500?'lat-f':ms<4000?'lat-m':'lat-s';}
+function latFmt(ms){if(!ms)return'—';return ms>=1000?(ms/1000).toFixed(1)+'s':ms+'ms';}
+function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function v(x){return esc(x)||'<span style="color:var(--dim)">—</span>';}
+
+function mkRow(r,idx){
+  const st=r.status==='ok'?'<span class="badge ok">✓ OK</span>':'<span class="badge err">✗ ERR</span>';
+  const lat=`<span class="${latCls(r.latency)}">${latFmt(r.latency)}</span>`;
+  const f=flag(r.ip_iso||r.country_iso||'');
+  const country=r.country?f+esc(r.country):'—';
+  const tr=document.createElement('tr');
+  tr.dataset.idx=idx;
+  tr.innerHTML=`
+    <td style="color:var(--dim)">${idx+1}</td>
+    <td class="mono" style="max-width:190px" title="${esc(r.proxy)}">${esc(r.proxy)}</td>
+    <td>${st}</td>
+    <td>${lat}</td>
+    <td>${r.ip?`<code>${esc(r.ip)}</code>`:(r.status==='error'?`<span style="color:var(--red);font-size:11px">${esc(r.error)}</span>`:'—')}</td>
+    <td style="max-width:150px" title="${esc(r.country)}">${country}</td>
+    <td>${esc(r.city)||'—'}</td>
+    <td style="max-width:150px" title="${esc(r.isp)}">${esc(r.isp)||'—'}</td>
+    <td>${osBadge(r.tcp_os)}</td>
+    <td style="color:${r.tcp_mtu?'var(--text)':'var(--dim)'}">${esc(r.tcp_mtu)||'—'}</td>
+    <td style="max-width:120px;font-size:11px" title="${esc(r.tcp_link)}">${esc(r.tcp_link)||'—'}</td>
+    <td class="mono" style="font-size:10px;max-width:160px" title="${esc(r.tcp_ja4t)}">${esc(r.tcp_ja4t)||'—'}</td>
+    <td><button class="btn btn-ghost btn-sm" title="Details" onclick="toggleDetail(this,${idx},event)">⊕</button></td>
+  `;
+  return tr;
+}
+
+function mkDetailRow(r){
+  const tr=document.createElement('tr');
+  tr.className='drow';
+  tr.innerHTML=`<td colspan="13">
+    <div class="dcontent">
+      <div>
+        <div class="dsec-title">📍 IP &amp; Location</div>
+        <div class="ditem"><span class="dkey">IP: </span><span class="dval mono">${v(r.ip)}</span></div>
+        <div class="ditem"><span class="dkey">IPv6: </span><span class="dval mono">${v(r.ipv6)}</span></div>
+        <div class="ditem"><span class="dkey">Hostname: </span><span class="dval">${v(r.hostname)}</span></div>
+        <div class="ditem"><span class="dkey">Country: </span><span class="dval">${v(r.country)} ${r.country_iso?'('+esc(r.country_iso)+')':''}</span></div>
+        <div class="ditem"><span class="dkey">Region: </span><span class="dval">${v(r.region)}</span></div>
+        <div class="ditem"><span class="dkey">City: </span><span class="dval">${v(r.city)}</span></div>
+        <div class="ditem"><span class="dkey">Timezone: </span><span class="dval">${v(r.timezone)}</span></div>
+        <div class="ditem"><span class="dkey">Coords: </span><span class="dval mono">${v(r.coords)}</span></div>
+      </div>
+      <div>
+        <div class="dsec-title">🏢 Network</div>
+        <div class="ditem"><span class="dkey">ISP: </span><span class="dval">${v(r.isp)}</span></div>
+        <div class="ditem"><span class="dkey">Org: </span><span class="dval">${v(r.org)}</span></div>
+        <div class="ditem"><span class="dkey">Network: </span><span class="dval">${v(r.network)}</span></div>
+        <div class="ditem"><span class="dkey">Usage: </span><span class="dval">${v(r.usage)}</span></div>
+        <div style="margin-top:10px" class="dsec-title">📋 Whois</div>
+        <div class="ditem"><span class="dkey">Range: </span><span class="dval mono">${v(r.whois_range)}</span></div>
+        <div class="ditem"><span class="dkey">CIDR: </span><span class="dval mono">${v(r.whois_cidr)}</span></div>
+        <div class="ditem"><span class="dkey">Name: </span><span class="dval">${v(r.whois_name)}</span></div>
+        <div class="ditem"><span class="dkey">Org: </span><span class="dval">${v(r.whois_org)}</span></div>
+        <div class="ditem"><span class="dkey">Registry: </span><span class="dval">${v(r.whois_reg)}</span></div>
+        <div class="ditem"><span class="dkey">Country: </span><span class="dval">${v(r.whois_country)}</span></div>
+        <div class="ditem"><span class="dkey">Net Type: </span><span class="dval">${v(r.whois_type)}</span></div>
+        <div class="ditem"><span class="dkey">Created: </span><span class="dval">${v(r.whois_created)}</span></div>
+        <div class="ditem"><span class="dkey">Changed: </span><span class="dval">${v(r.whois_changed)}</span></div>
+      </div>
+      <div>
+        <div class="dsec-title">🔬 TCP/IP Fingerprint</div>
+        <div class="ditem"><span class="dkey">OS: </span><span class="dval">${v(r.tcp_os)}</span></div>
+        <div class="ditem"><span class="dkey">MTU: </span><span class="dval">${v(r.tcp_mtu)}</span></div>
+        <div class="ditem"><span class="dkey">Link Type: </span><span class="dval">${v(r.tcp_link)}</span></div>
+        <div class="ditem"><span class="dkey">Distance: </span><span class="dval">${v(r.tcp_dist)}</span></div>
+        <div class="ditem"><span class="dkey">JA4T: </span><span class="dval mono">${v(r.tcp_ja4t)}</span></div>
+        <div style="margin-top:10px" class="dsec-title">🔒 TLS / HTTP2</div>
+        <div class="ditem"><span class="dkey">JA4: </span><span class="dval mono">${v(r.tls_ja4)}</span></div>
+        <div class="ditem"><span class="dkey">JA3: </span><span class="dval mono">${v(r.tls_ja3)}</span></div>
+        <div class="ditem"><span class="dkey">HTTP/2 Akamai: </span><span class="dval mono">${r.h2_akamai ? esc(r.h2_akamai) : '<span style="color:var(--dim)">n/a (HTTP/1.1)</span>'}</span></div>
+      </div>
+      <div>
+        <div class="dsec-title">🛡️ Fraud / Proxy Detection</div>
+        ${(()=>{
+          const score = r.sc_score ?? '';
+          const risk  = r.sc_risk || '';
+          const riskCls = risk ? `sc-${risk.replace(/\s/g,'_').toLowerCase()}` : '';
+          const scoreTxt = score !== '' ? `${score}/100` : '—';
+          const riskTxt  = risk  ? `<span class="${riskCls}">${esc(risk.toUpperCase())}</span>` : '—';
+          const flag2 = (val, label) => `<span class="sc-flag ${val?'sc-yes':'sc-no'}">${val?'✓':'✗'} ${label}</span>`;
+          return `
+        <div class="ditem"><span class="dkey">Fraud Score: </span><span class="dval">${scoreTxt} &nbsp;${riskTxt}</span></div>
+        <div class="ditem"><span class="dkey">ISP Score: </span><span class="dval">${r.sc_isp_score !== '' && r.sc_isp_score !== undefined ? r.sc_isp_score+'/100' : '—'} <span class="${r.sc_isp_risk ? 'sc-'+r.sc_isp_risk.replace(/\s/g,'_').toLowerCase() : ''}" style="font-size:11px">${r.sc_isp_risk ? r.sc_isp_risk.toUpperCase() : ''}</span></span></div>
+        <div class="ditem"><span class="dkey">Proxy Type: </span><span class="dval">${r.sc_proxy_type ? esc(r.sc_proxy_type) : '<span style="color:var(--dim)">—</span>'}</span></div>
+        <div class="ditem" style="margin-top:6px">${flag2(r.sc_is_vpn,'VPN')} ${flag2(r.sc_is_dc,'Datacenter')} ${flag2(r.sc_is_tor,'Tor')}</div>
+        <div class="ditem">${flag2(r.sc_is_proxy,'Proxy')} ${flag2(r.sc_spambot,'Spambot')} ${flag2(r.sc_blacklisted,'Blacklisted')}</div>
+        <div class="ditem" style="margin-top:6px">${flag2(r.sc_fh30,'Blacklist 30d')}</div>
+        ${r.sc_url ? `<div class="ditem" style="margin-top:6px"><a href="${esc(r.sc_url)}" target="_blank" style="color:var(--blue);font-size:11px">→ View on Scamalytics</a></div>` : ''}
+          `;
+        })()}
+      </div>
+    </div>
+  </td>`;
+  return tr;
+}
+
+function toggleDetail(btn,idx,e){
+  e.stopPropagation();
+  const tbody=document.getElementById('tbody');
+  let targetRow=null;
+  for(const tr of tbody.querySelectorAll('tr[data-idx]')){
+    if(+tr.dataset.idx===idx){targetRow=tr;break;}
+  }
+  if(!targetRow)return;
+  const next=targetRow.nextElementSibling;
+  if(next&&next.classList.contains('drow')){
+    next.remove();targetRow.classList.remove('exp');btn.textContent='⊕';return;
+  }
+  // close others
+  tbody.querySelectorAll('.drow').forEach(r=>r.remove());
+  tbody.querySelectorAll('tr[data-idx]').forEach(r=>{r.classList.remove('exp');const b=r.querySelector('button');if(b)b.textContent='⊕';});
+  targetRow.classList.add('exp');btn.textContent='⊖';
+  targetRow.after(mkDetailRow(results[idx]));
+}
+
+function updStats(){
+  const total=+document.getElementById('s-total').textContent||0;
+  const ok=results.filter(r=>r.status==='ok').length;
+  const err=results.filter(r=>r.status==='error').length;
+  const pend=Math.max(0,total-results.length);
+  document.getElementById('s-ok').textContent=ok;
+  document.getElementById('s-err').textContent=err;
+  document.getElementById('s-pend').textContent=pend;
+  const pct=total>0?Math.round(results.length/total*100):0;
+  document.getElementById('s-pct').textContent=pct+'%';
+  document.getElementById('prog-bar').style.width=pct+'%';
+}
+
+function setFilter(f){
+  filter=f;
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
+  renderAll();
+}
+
+function renderAll(){
+  const tbody=document.getElementById('tbody');tbody.innerHTML='';
+  results.filter(r=>filter==='all'||r.status===filter)
+    .forEach(r=>tbody.appendChild(mkRow(r,results.indexOf(r))));
+}
+
+function appendRow(r){
+  if(filter==='all'||r.status===filter){
+    document.getElementById('tbody').appendChild(mkRow(r,results.indexOf(r)));
+  }
+}
+
+async function startCheck(){
+  const raw=document.getElementById('proxy-input').value;
+  const proxies=raw.split('\n').map(p=>p.trim()).filter(Boolean);
+  if(!proxies.length){alert('Please enter at least one proxy.');return;}
+  results=[];
+  document.getElementById('tbody').innerHTML='';
+  document.getElementById('empty').style.display='none';
+  document.getElementById('tbl').style.display='';
+  document.getElementById('prog-card').style.display='';
+  document.getElementById('toolbar').style.display='';
+  document.getElementById('s-total').textContent=proxies.length;
+  document.getElementById('s-ok').textContent=0;
+  document.getElementById('s-err').textContent=0;
+  document.getElementById('s-pend').textContent=proxies.length;
+  document.getElementById('s-pct').textContent='0%';
+  document.getElementById('prog-bar').style.width='0%';
+  document.getElementById('btn-check').disabled=true;
+  document.getElementById('btn-stop').disabled=false;
+  const concurrency=parseInt(document.getElementById('concurrency').value)||5;
+  const timeout=(parseInt(document.getElementById('timeout').value)||30)*1000;
+  let resp;
+  try{resp=await fetch('/api/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({proxies,concurrency,timeout})});}
+  catch(e){alert('Server error: '+e.message);resetBtns();return;}
+  const{jobId}=await resp.json();
+  if(es)es.close();
+  es=new EventSource(`/api/stream/${jobId}`);
+  es.onmessage=e=>{
+    const msg=JSON.parse(e.data);
+    if(msg.type==='result'){results.push(msg.result);appendRow(msg.result);updStats();}
+    else if(msg.type==='done'){es.close();es=null;resetBtns();}
+  };
+  es.onerror=()=>{if(es){es.close();es=null;}resetBtns();};
+}
+
+function stopCheck(){if(es){es.close();es=null;}resetBtns();}
+
+function resetBtns(){
+  document.getElementById('btn-check').disabled=false;
+  document.getElementById('btn-stop').disabled=true;
+}
+
+function clearAll(){
+  if(es){es.close();es=null;}
+  results=[];
+  document.getElementById('tbody').innerHTML='';
+  document.getElementById('tbl').style.display='none';
+  document.getElementById('empty').style.display='';
+  document.getElementById('prog-card').style.display='none';
+  document.getElementById('toolbar').style.display='none';
+  resetBtns();
+}
+
+function exportCsv(){
+  if(!results.length)return;
+  const H=['Proxy','Status','Latency_ms','IP','Hostname','Country','Region','City','ISP','Org','Network','Usage','Timezone','Coords','TCP_OS','TCP_MTU','TCP_Link','TCP_Distance','JA4T','TLS_JA4','TLS_JA3','H2_Akamai','Whois_Range','Whois_CIDR','Whois_Name','IPv6','Error'];
+  const rows=results.map(r=>[r.proxy,r.status,r.latency||'',r.ip||'',r.hostname||'',r.country||'',r.region||'',r.city||'',r.isp||'',r.org||'',r.network||'',r.usage||'',r.timezone||'',r.coords||'',r.tcp_os||'',r.tcp_mtu||'',r.tcp_link||'',r.tcp_dist||'',r.tcp_ja4t||'',r.tls_ja4||'',r.tls_ja3||'',r.h2_akamai||'',r.whois_range||'',r.whois_cidr||'',r.whois_name||'',r.ipv6||'',r.error||''].map(x=>`"${String(x).replace(/"/g,'""')}"`));
+  const csv=[H.join(','),...rows.map(r=>r.join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`proxies-${new Date().toISOString().slice(0,16).replace(/:/g,'-')}.csv`;
+  document.body.appendChild(a);a.click();a.remove();
+}
+</script>
+</body>
+</html>
