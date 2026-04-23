@@ -781,7 +781,7 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
     // dnsproxy env: upstreams chosen by proxy's country (routes through SOCKS)
     // Keep explicit fallback upstreams so DNS does not stall when one resolver is flaky.
     fs.writeFileSync(path.join(gwPath, 'dnsproxy.env'),
-      `DNS_PORT=${dnsPort}\nDNS_PORT_BOOTSTRAP=8.8.8.8:53\nDNS_UPSTREAM_1=${dnsCfg.u1}\nDNS_UPSTREAM_2=${dnsCfg.u2}\nDNS_FALLBACK_1=${dnsCfg.u1}\nDNS_FALLBACK_2=${dnsCfg.u2}\n`);
+      `DNS_PORT=${dnsPort}\nDNS_PORT_BOOTSTRAP=tcp://8.8.8.8:53\nDNS_UPSTREAM_1=${dnsCfg.u1}\nDNS_UPSTREAM_2=${dnsCfg.u2}\nDNS_FALLBACK_1=${dnsCfg.u1}\nDNS_FALLBACK_2=${dnsCfg.u2}\n`);
 
     // dnsmasq-gw env: per-gateway resolver listening on the VPN gateway IP
     const vpnGwIp = `10.${100 + vpnIdx}.0.1`;
@@ -806,14 +806,20 @@ ifconfig-pool-persist ${gwPath}/ipp.txt
 push "redirect-gateway def1 bypass-dhcp"
 push "dhcp-option DNS 10.${100 + vpnIdx}.0.1"
 push "block-outside-dns"
-keepalive 10 60
+keepalive 10 30
 cipher AES-256-GCM
 auth SHA256
-compress lz4-v2
-push "compress lz4-v2"
+duplicate-cn
+explicit-exit-notify 1
 max-clients 50
 persist-key
 persist-tun
+tun-mtu 1380
+mssfix 1320
+sndbuf 0
+rcvbuf 0
+push "sndbuf 0"
+push "rcvbuf 0"
 status ${gwPath}/status.log
 log-append ${gwPath}/openvpn.log
 verb 3
@@ -847,6 +853,8 @@ down "/etc/openvpn/gateways/down.sh ${name}"
     try { execSync(`id dnsproxy && test -x /usr/local/bin/dnsproxy && systemctl enable --now dnsproxy@${name}`, { shell:'/bin/bash' }); } catch(e) { console.warn('[gw dnsproxy]', e.message); }
     // dnsmasq-gw: per-gateway DNS resolver (listens on VPN gateway IP via bind-dynamic)
     try { execSync(`systemctl enable --now dnsmasq-gw@${name}`); } catch(e) { console.warn('[gw dnsmasq-gw]', e.message); }
+    // watchdog timer: auto-restart tun2socks if proxy becomes unresponsive
+    try { execSync(`systemctl enable --now tun2socks-watchdog@${name}.timer`); } catch(e) { console.warn('[gw watchdog]', e.message); }
     // Symlink openvpn server conf so systemd finds it
     const ovSymlink = `/etc/openvpn/server/${name}.conf`;
     if (!fs.existsSync(ovSymlink)) fs.symlinkSync(path.join(gwPath, `${name}.conf`), ovSymlink);
@@ -874,6 +882,7 @@ app.delete('/api/gateways/:name', requireVpnToken, (req, res) => {
   try { execSync(`systemctl disable --now tun2socks@${name}`); } catch(_){}
   try { execSync(`systemctl disable --now dnsproxy@${name}`); } catch(_){}
   try { execSync(`systemctl disable --now dnsmasq-gw@${name}`); } catch(_){}
+  try { execSync(`systemctl disable --now tun2socks-watchdog@${name}.timer`); } catch(_){}
   // Remove per-gateway dnsproxy user
   try { execSync(`userdel dnsproxy-${name} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
   try { fs.unlinkSync(`/etc/openvpn/server/${name}.conf`); } catch(_){}
