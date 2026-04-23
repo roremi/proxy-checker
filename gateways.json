@@ -1,0 +1,23 @@
+{
+  "test": {
+    "name": "test",
+    "proxy_url": "socks5://pg_khongthai1994.kt:khongthai1994@154.198.35.247:9093",
+    "proxy_scheme": "socks5",
+    "vpn_port": 1195,
+    "exit_ip": "174.202.161.183",
+    "table_id": 100,
+    "vpn_subnet_index": 0,
+    "t2s_subnet_index": 0,
+    "vpn_subnet": "10.100.0.0/24",
+    "t2s_dev": "t2s-test",
+    "client_count": 1,
+    "created_at": "2026-04-23T20:12:51.177Z",
+    "last_tested": "2026-04-23T21:05:25.225Z",
+    "country": "US",
+    "dns_upstream1": "tls://1.1.1.1:853",
+    "dns_fallback": "1.1.1.1",
+    "gw_user": "dnsproxy-test",
+    "gw_uid": 996,
+    "fwmark": "0x64"
+  }
+}

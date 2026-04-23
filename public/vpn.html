@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VPN Manager</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--blue:#58a6ff;--green:#3fb950;--red:#f85149;--orange:#d29922;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;padding:24px}
+h1{font-size:20px;margin-bottom:4px;color:var(--text)}
+.sub{color:var(--dim);font-size:12px;margin-bottom:24px}
+.tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border)}
+.tab{padding:8px 18px;cursor:pointer;border-radius:6px 6px 0 0;color:var(--dim);border:1px solid transparent;border-bottom:none;margin-bottom:-1px}
+.tab.active{background:var(--surface2);border-color:var(--border);color:var(--text)}
+.tab:hover:not(.active){color:var(--text)}
+.section{display:none}.section.active{display:block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:16px}
+.card h2{font-size:14px;font-weight:600;margin-bottom:12px;color:var(--blue)}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-green{background:rgba(63,185,80,.15);color:var(--green)}
+.badge-red{background:rgba(248,81,73,.15);color:var(--red)}
+.badge-blue{background:rgba(88,166,255,.15);color:var(--blue)}
+input,select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 12px;font-size:13px;outline:none;width:100%}
+input:focus,select:focus{border-color:var(--blue)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 16px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:6px;cursor:pointer;font-size:13px}
+.btn:hover{background:var(--border)}
+.btn-blue{background:var(--blue);border-color:var(--blue);color:#0d1117}
+.btn-blue:hover{opacity:.9}
+.btn-red{border-color:var(--red);color:var(--red)}
+.btn-red:hover{background:rgba(248,81,73,.1)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.flex1{flex:1}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.mono{font-family:monospace;font-size:12px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px;max-width:480px;width:90%;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:15px;margin-bottom:16px}
+.conf-box{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--text);margin-bottom:12px;max-height:240px;overflow-y:auto}
+.qr-wrap{text-align:center;margin-bottom:12px}
+.qr-wrap img{max-width:200px;border-radius:8px;border:4px solid #fff}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+.info-row:last-child{border-bottom:none}
+.info-label{color:var(--dim);font-size:12px}
+.info-val{font-family:monospace;font-size:12px;word-break:break-all;text-align:right;max-width:300px}
+.copy-btn{padding:2px 8px;font-size:11px;cursor:pointer;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--dim)}
+.copy-btn:hover{color:var(--text)}
+.stat{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.stat-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 18px;min-width:120px}
+.stat-item .num{font-size:24px;font-weight:700;color:var(--text)}
+.stat-item .lbl{font-size:11px;color:var(--dim);margin-top:2px}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+#login-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px;width:320px}
+.login-box h2{font-size:16px;margin-bottom:20px;text-align:center}
+.err{color:var(--red);font-size:12px;margin-top:8px;text-align:center}
+</style>
+</head>
+<body>
+
+<div id="login-overlay">
+  <div class="login-box">
+    <h2>🔐 VPN Admin</h2>
+    <input type="password" id="token-input" placeholder="Admin token" onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="login-err" class="err"></div>
+    <br>
+    <button class="btn btn-blue" style="width:100%;justify-content:center;margin-top:8px" onclick="doLogin()">Login</button>
+  </div>
+</div>
+
+<div id="main" style="display:none">
+<h1>🛡 VPN Manager</h1>
+<div class="sub">Server: 103.162.14.102 &nbsp;|&nbsp; <span id="wg-status-badge">WireGuard: checking...</span> &nbsp;|&nbsp; Shadowsocks: <span id="ss-status-badge">checking...</span> &nbsp;|&nbsp; OpenVPN: <span id="ov-status-badge">checking...</span></div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('wg',this)">WireGuard</div>
+  <div class="tab" onclick="switchTab('ss',this)">Shadowsocks</div>
+  <div class="tab" onclick="switchTab('ov',this)">OpenVPN</div>
+</div>
+
+<!-- WireGuard Section -->
+<div class="section active" id="sec-wg">
+  <div class="stat">
+    <div class="stat-item"><div class="num" id="wg-count">—</div><div class="lbl">Clients</div></div>
+    <div class="stat-item"><div class="num" style="color:var(--green)" id="wg-running">—</div><div class="lbl">Server</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Create New Client</h2>
+    <div class="row">
+      <input class="flex1" id="new-client-name" placeholder="Client name (e.g. phone1, laptop)" maxlength="32">
+      <button class="btn btn-blue" onclick="createClient()">+ Create</button>
+    </div>
+    <div style="font-size:11px;color:var(--dim)">Letters, numbers, underscores, dashes only. Each client gets a unique IP and key pair.</div>
+  </div>
+
+  <div class="card">
+    <h2>Active Clients</h2>
+    <table id="wg-table">
+      <thead><tr><th>Name</th><th>IP</th><th>Created</th><th>Actions</th></tr></thead>
+      <tbody id="wg-tbody">
+        <tr><td colspan="4" style="color:var(--dim);text-align:center;padding:20px">No clients yet</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Shadowsocks Section -->
+<div class="section" id="sec-ss">
+  <div class="card">
+    <h2>Shadowsocks Server Info</h2>
+    <div id="ss-info-wrap">Loading...</div>
+    <br>
+    <button class="btn btn-red btn-sm" onclick="ssReset()">⟳ Reset Password</button>
+  </div>
+  <div class="card">
+    <h2>QR Code — Scan with Shadowsocks app</h2>
+    <div class="qr-wrap"><canvas id="ss-qr-canvas" style="max-width:200px;border-radius:8px;border:4px solid #fff;display:none"></canvas>
+    <div id="ss-qr-img" style="text-align:center"></div></div>
+    <div style="font-size:11px;color:var(--dim);text-align:center">Use Shadowsocks app (iOS/Android/Windows) to scan or import the link</div>
+  </div>
+</div>
+</div>
+
+<!-- OpenVPN Section -->
+<div class="section" id="sec-ov">
+  <div class="stat">
+    <div class="stat-item"><div class="num" id="ov-count">—</div><div class="lbl">Clients</div></div>
+    <div class="stat-item"><div class="num" style="color:var(--green)" id="ov-running">—</div><div class="lbl">Server</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Create New Client</h2>
+    <div class="row">
+      <input class="flex1" id="ov-new-name" placeholder="Client name (e.g. laptop, iphone)" maxlength="32">
+      <button class="btn btn-blue" onclick="ovCreate()">+ Create</button>
+    </div>
+    <div style="font-size:11px;color:var(--dim)">Generates a unique .ovpn file. Import into OpenVPN Connect (iOS/Android/Windows/Mac).</div>
+  </div>
+
+  <div class="card">
+    <h2>Active Clients</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Created</th><th>Actions</th></tr></thead>
+      <tbody id="ov-tbody">
+        <tr><td colspan="3" style="color:var(--dim);text-align:center;padding:20px">No clients yet</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- OpenVPN config modal -->
+<div class="modal-overlay" id="ov-modal">
+  <div class="modal">
+    <h3>📄 OpenVPN Config — <span id="ov-modal-name"></span></h3>
+    <div class="conf-box" id="ov-modal-conf"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-blue btn-sm" onclick="ovDownload()">⬇ Download .ovpn</button>
+      <button class="btn btn-sm" onclick="ovCopy()">📋 Copy</button>
+      <button class="btn btn-sm" style="margin-left:auto" onclick="document.getElementById('ov-modal').classList.remove('open')">Close</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="client-modal">
+  <div class="modal">
+    <h3>📱 Client Config — <span id="modal-name"></span></h3>
+    <div class="qr-wrap"><img id="modal-qr" src="" alt="QR"></div>
+    <div class="conf-box" id="modal-conf"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-blue btn-sm" onclick="downloadConf()">⬇ Download .conf</button>
+      <button class="btn btn-sm" onclick="copyConf()">📋 Copy</button>
+      <button class="btn btn-sm" style="margin-left:auto" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let TOKEN = '';
+let _currentConf = '';
+let _currentName = '';
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+function doLogin() {
+  const t = document.getElementById('token-input').value.trim();
+  if (!t) return;
+  TOKEN = t;
+  // Try a real API call to verify
+  fetchApi('/api/vpn/wg/status').then(d => {
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('main').style.display = 'block';
+    loadAll();
+  }).catch(() => {
+    document.getElementById('login-err').textContent = 'Invalid token';
+    TOKEN = '';
+  });
+}
+
+// ── API helper ────────────────────────────────────────────────────────────────
+async function fetchApi(url, opts={}) {
+  opts.headers = { ...(opts.headers||{}), 'x-vpn-token': TOKEN, 'Content-Type': 'application/json' };
+  const r = await fetch(url, opts);
+  if (r.status === 401) throw new Error('Unauthorized');
+  return r.json();
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('sec-' + id).classList.add('active');
+}
+
+// ── Load all ──────────────────────────────────────────────────────────────────
+async function loadAll() {
+  loadWgStatus();
+  loadClients();
+  loadSsInfo();
+}
+
+// ── WireGuard ─────────────────────────────────────────────────────────────────
+async function loadWgStatus() {
+  try {
+    const d = await fetchApi('/api/vpn/wg/status');
+    const el = document.getElementById('wg-status-badge');
+    const el2 = document.getElementById('wg-running');
+    if (d.running) {
+      el.innerHTML = 'WireGuard: <span class="badge badge-green">Running</span>';
+      el2.textContent = 'ON';
+    } else {
+      el.innerHTML = 'WireGuard: <span class="badge badge-red">Stopped</span>';
+      el2.textContent = 'OFF';
+    }
+  } catch(_){}
+}
+
+async function loadClients() {
+  try {
+    const d = await fetchApi('/api/vpn/wg/clients');
+    document.getElementById('wg-count').textContent = d.count;
+    const tbody = document.getElementById('wg-tbody');
+    if (!d.clients.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--dim);text-align:center;padding:20px">No clients yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.clients.map(c => `
+      <tr>
+        <td><strong>${esc(c.name)}</strong></td>
+        <td class="mono">${esc(c.ip)}</td>
+        <td style="color:var(--dim);font-size:12px">${new Date(c.createdAt).toLocaleDateString()}</td>
+        <td>
+          <button class="btn btn-sm" onclick="showClient('${esc(c.name)}')">🔑 Config</button>
+          &nbsp;
+          <button class="btn btn-sm btn-red" onclick="deleteClient('${esc(c.name)}')">✕</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function createClient() {
+  const name = document.getElementById('new-client-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  if (!name) { toast('Enter a valid client name'); return; }
+  const btn = document.querySelector('[onclick="createClient()"]');
+  btn.textContent = 'Creating...'; btn.disabled = true;
+  try {
+    const d = await fetchApi('/api/vpn/wg/client', { method: 'POST', body: JSON.stringify({ name }) });
+    if (d.error) { toast(d.error, true); return; }
+    document.getElementById('new-client-name').value = '';
+    openModal(d.name, d.conf, d.qr);
+    loadClients();
+    toast('Client created!');
+  } catch(e) { toast(e.message, true); }
+  finally { btn.textContent = '+ Create'; btn.disabled = false; }
+}
+
+async function deleteClient(name) {
+  if (!confirm(`Delete client "${name}"?`)) return;
+  try {
+    await fetchApi(`/api/vpn/wg/client/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    loadClients();
+    toast('Deleted');
+  } catch(e) { toast(e.message, true); }
+}
+
+async function showClient(name) {
+  try {
+    const r = await fetch(`/api/vpn/wg/client/${encodeURIComponent(name)}/conf?token=${TOKEN}`);
+    const conf = await r.text();
+    const qrRes = await fetch(`/api/vpn/wg/client/${encodeURIComponent(name)}/qr?token=${TOKEN}`);
+    const blob = await qrRes.blob();
+    const qrUrl = URL.createObjectURL(blob);
+    openModal(name, conf, null, qrUrl);
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Shadowsocks ───────────────────────────────────────────────────────────────
+async function loadSsInfo() {
+  try {
+    const d = await fetchApi('/api/vpn/ss/info');
+    document.getElementById('ss-status-badge').innerHTML = '<span class="badge badge-green">Running :' + d.port + '</span>';
+    document.getElementById('ss-info-wrap').innerHTML = `
+      <div class="info-row"><span class="info-label">Server</span><span class="info-val">${esc(d.server)}:${d.port}</span></div>
+      <div class="info-row"><span class="info-label">Method</span><span class="info-val">${esc(d.method)}</span></div>
+      <div class="info-row"><span class="info-label">Password</span><span class="info-val" id="ss-pass">${esc(d.password)}</span> <button class="copy-btn" onclick="copy('${esc(d.password)}')">Copy</button></div>
+      <div class="info-row"><span class="info-label">SS Link</span><span class="info-val" id="ss-link" style="word-break:break-all">${esc(d.link)}</span> <button class="copy-btn" onclick="copy(document.getElementById('ss-link').textContent)">Copy</button></div>
+    `;
+    // Generate QR via qrcode.js CDN
+    const wrap = document.getElementById('ss-qr-img');
+    wrap.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(d.link)}&size=200x200&margin=2" style="max-width:200px;border-radius:8px;border:4px solid #fff">`;
+  } catch(e) {}
+}
+
+async function ssReset() {
+  if (!confirm('Reset Shadowsocks password? All connected clients will need to reconnect.')) return;
+  try {
+    const d = await fetchApi('/api/vpn/ss/reset', { method: 'POST' });
+    toast('Password reset! New: ' + d.password);
+    loadSsInfo();
+  } catch(e) { toast(e.message, true); }
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function openModal(name, conf, qrData, qrUrl) {
+  _currentName = name;
+  _currentConf = conf;
+  document.getElementById('modal-name').textContent = name;
+  document.getElementById('modal-conf').textContent = conf;
+  const img = document.getElementById('modal-qr');
+  if (qrData) img.src = qrData;
+  else if (qrUrl) img.src = qrUrl;
+  else img.src = '';
+  document.getElementById('client-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('client-modal').classList.remove('open');
+}
+
+function downloadConf() {
+  const blob = new Blob([_currentConf], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${_currentName}.conf`;
+  a.click();
+}
+
+function copyConf() { copy(_currentConf); }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function copy(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Copied!')).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    toast('Copied!');
+  });
+}
+
+let _toastTimer;
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.borderColor = err ? 'var(--red)' : 'var(--border)';
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// Close modal on overlay click
+document.getElementById('client-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('client-modal')) closeModal();
+});
+document.getElementById('ov-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('ov-modal')) document.getElementById('ov-modal').classList.remove('open');
+});
+// Enter to login
+document.getElementById('token-input').focus();
+
+// ── OpenVPN ───────────────────────────────────────────────────────────────────
+let _ovConf = '', _ovName = '';
+
+async function loadOvStatus() {
+  try {
+    const d = await fetchApi('/api/vpn/ov/status');
+    const badge = document.getElementById('ov-status-badge');
+    const el = document.getElementById('ov-running');
+    if (d.running) {
+      badge.innerHTML = 'OpenVPN: <span class="badge badge-green">Running</span>';
+      if(el) el.textContent = 'ON';
+    } else {
+      badge.innerHTML = 'OpenVPN: <span class="badge badge-red">Stopped</span>';
+      if(el) el.textContent = 'OFF';
+    }
+  } catch(_){}
+}
+
+async function loadOvClients() {
+  try {
+    const d = await fetchApi('/api/vpn/ov/clients');
+    const el = document.getElementById('ov-count');
+    if (el) el.textContent = d.count;
+    const tbody = document.getElementById('ov-tbody');
+    if (!tbody) return;
+    if (!d.clients.length) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:var(--dim);text-align:center;padding:20px">No clients yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = d.clients.map(c => `
+      <tr>
+        <td><strong>${esc(c.name)}</strong></td>
+        <td style="color:var(--dim);font-size:12px">${new Date(c.createdAt).toLocaleDateString()}</td>
+        <td>
+          <a class="btn btn-sm btn-blue" href="/api/vpn/ov/client/${encodeURIComponent(c.name)}/ovpn?token=${TOKEN}" download="${esc(c.name)}.ovpn">⬇ .ovpn</a>
+          &nbsp;
+          <button class="btn btn-sm btn-red" onclick="ovDelete('${esc(c.name)}')">✕ Revoke</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function ovCreate() {
+  const name = document.getElementById('ov-new-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  if (!name) { toast('Enter a valid client name'); return; }
+  const btn = document.querySelector('[onclick="ovCreate()"]');
+  btn.textContent = 'Generating...'; btn.disabled = true;
+  try {
+    const d = await fetchApi('/api/vpn/ov/client', { method: 'POST', body: JSON.stringify({ name }) });
+    if (d.error) { toast(d.error, true); return; }
+    document.getElementById('ov-new-name').value = '';
+    // Show modal with ovpn content
+    _ovName = d.name; _ovConf = d.ovpn;
+    document.getElementById('ov-modal-name').textContent = d.name;
+    document.getElementById('ov-modal-conf').textContent = d.ovpn;
+    document.getElementById('ov-modal').classList.add('open');
+    loadOvClients();
+    toast('Client created! Download the .ovpn file.');
+  } catch(e) { toast(e.message, true); }
+  finally { btn.textContent = '+ Create'; btn.disabled = false; }
+}
+
+async function ovDelete(name) {
+  if (!confirm(`Revoke & delete client "${name}"?`)) return;
+  try {
+    await fetchApi(`/api/vpn/ov/client/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    loadOvClients();
+    toast('Client revoked');
+  } catch(e) { toast(e.message, true); }
+}
+
+function ovDownload() {
+  const blob = new Blob([_ovConf], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${_ovName}.ovpn`;
+  a.click();
+}
+function ovCopy() { copy(_ovConf); }
+
+// Hook into loadAll
+const _origLoadAll = loadAll;
+loadAll = async function() {
+  await _origLoadAll();
+  loadOvStatus();
+  loadOvClients();
+};
+</script>
+</body>
+</html>

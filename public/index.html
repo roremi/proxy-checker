@@ -19,6 +19,10 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:1
 /* Header */
 .hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
 .hdr-logo{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px}
+.hdr-nav{display:flex;gap:4px;margin-left:20px}
+.hdr-nav a{color:var(--dim);font-size:13px;padding:6px 12px;border-radius:6px;text-decoration:none;transition:all .15s}
+.hdr-nav a:hover{background:var(--surface2);color:var(--text)}
+.hdr-nav a.active{background:var(--surface2);color:var(--blue)}
 .hdr-sub{color:var(--dim);font-size:12px;margin-left:auto}
 /* Container */
 .wrap{max-width:1700px;margin:0 auto;padding:20px 24px}
@@ -59,11 +63,25 @@ code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:1
 .prog-wrap{height:6px;background:var(--surface2);border-radius:99px;overflow:hidden}
 .prog-bar{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));border-radius:99px;transition:width .3s;width:0%}
 /* Toolbar */
-.toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.toolbar{margin-bottom:10px}
+.toolbar-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .fbtn{padding:3px 11px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:12px;cursor:pointer;transition:all .15s}
 .fbtn.on{background:var(--blue);border-color:var(--blue);color:#0d1117;font-weight:600}
 .fbtn:hover:not(.on){background:var(--surface2);color:var(--text)}
 .sep{flex:1}
+/* Advanced filter panel */
+.flt-panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;display:none}
+.flt-panel.open{display:block}
+.flt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-items:end}
+.flt-group{display:flex;flex-direction:column;gap:3px}
+.flt-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--dim)}
+.flt-input{background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:12px;padding:4px 8px;border-radius:5px;outline:none;width:100%;box-sizing:border-box}
+.flt-input:focus{border-color:var(--blue)}
+.flt-row2{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.flt-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);font-size:11px;cursor:pointer;transition:all .15s;user-select:none}
+.flt-chip input{margin:0;cursor:pointer;accent-color:var(--blue)}
+.flt-chip:has(input:checked){border-color:var(--blue);background:rgba(88,166,255,.1);color:var(--blue)}
+.flt-active-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--blue);color:#0d1117;font-size:10px;font-weight:700;margin-left:4px}
 /* Table */
 .tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border)}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -103,7 +121,18 @@ td.mono{font-family:var(--mono);font-size:11px}
 .sc-flag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:600}
 .sc-yes{background:rgba(248,81,73,.15);color:#f85149}
 .sc-no{background:rgba(63,185,80,.1);color:#3fb950}
-.empty{text-align:center;padding:60px 20px;color:var(--dim)}
+/* Saved library */
+.lib-panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-top:10px}
+.lib-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.lib-title{font-size:12px;font-weight:700;color:var(--text);flex:1}
+.lib-list{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto}
+.lib-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:5px;font-size:12px}
+.lib-item-proxy{flex:1;color:var(--text);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.lib-item-meta{font-size:11px;color:var(--dim);white-space:nowrap}
+.lib-item-risk{font-size:11px;font-weight:600;white-space:nowrap}
+.lib-item-tags{font-size:10px;color:var(--dim);white-space:nowrap}
+.lib-del{padding:0 5px!important;font-size:14px;line-height:1;opacity:.5}.lib-del:hover{opacity:1;color:#e05252}
+.lib-empty{text-align:center;padding:20px;color:var(--dim);font-size:12px}
 .empty-ico{font-size:44px;margin-bottom:10px}
 /* Scrollbar */
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -119,6 +148,10 @@ td.mono{font-family:var(--mono);font-size:11px}
     <svg width="20" height="20" fill="#58a6ff" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
     Proxy Checker
   </div>
+  <nav class="hdr-nav">
+    <a href="/" class="active">Checker</a>
+    <a href="/gateways.html">Gateways</a>
+  </nav>
   <div class="hdr-sub">Fingerprint analysis via BrowserLeaks</div>
 </div>
 
@@ -173,15 +206,109 @@ td.mono{font-family:var(--mono);font-size:11px}
 
   <!-- Toolbar -->
   <div class="toolbar" id="toolbar" style="display:none">
-    <button class="fbtn on" data-f="all"   onclick="setFilter('all')">All</button>
-    <button class="fbtn"    data-f="ok"    onclick="setFilter('ok')">✓ OK</button>
-    <button class="fbtn"    data-f="error" onclick="setFilter('error')">✗ Error</button>
-    <div class="sep"></div>
-    <button class="btn btn-ghost btn-sm" onclick="exportCsv()">
-      <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
-      Export CSV
-    </button>
-    <button class="btn btn-ghost btn-sm" onclick="clearAll()">Clear</button>
+    <div class="toolbar-top">
+      <button class="fbtn on" data-f="all"   onclick="setQFilter('all')">All</button>
+      <button class="fbtn"    data-f="ok"    onclick="setQFilter('ok')">✓ OK</button>
+      <button class="fbtn"    data-f="error" onclick="setQFilter('error')">✗ Error</button>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <button class="fbtn" id="flt-toggle-btn" onclick="toggleFltPanel()">
+        ⚙ Filter <span id="flt-badge" style="display:none" class="flt-active-badge">0</span>
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="clearFilters()" id="flt-clear-btn" style="display:none">✕ Clear filters</button>
+      <div class="sep"></div>
+      <span id="flt-result-count" style="font-size:11px;color:var(--dim)"></span>
+      <button class="btn btn-ghost btn-sm" onclick="exportCsv()">
+        <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/><path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/></svg>
+        Export CSV
+      </button>
+      <button class="btn btn-ghost btn-sm" onclick="clearAll()">Clear</button>
+    </div>
+
+    <!-- Advanced filter panel -->
+    <div class="flt-panel" id="flt-panel">
+      <div class="flt-grid">
+        <div class="flt-group" style="grid-column:1/-1">
+          <span class="flt-label">🔍 Search (IP, Proxy, Country, City, ISP, Hostname)</span>
+          <input class="flt-input" id="flt-search" placeholder="Search anything..." oninput="applyFilters()">
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">Country</span>
+          <select class="flt-input" id="flt-country" onchange="applyFilters()">
+            <option value="">All countries</option>
+          </select>
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">ISP contains</span>
+          <input class="flt-input" id="flt-isp" placeholder="e.g. Verizon" oninput="applyFilters()">
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">Usage Type</span>
+          <select class="flt-input" id="flt-usage" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="residential">Residential</option>
+            <option value="cellular">Cellular / Mobile</option>
+            <option value="corporate">Corporate / Business</option>
+            <option value="datacenter">Data Center</option>
+            <option value="educational">Educational</option>
+          </select>
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">OS</span>
+          <select class="flt-input" id="flt-os" onchange="applyFilters()">
+            <option value="">All OS</option>
+            <option value="windows">Windows</option>
+            <option value="linux">Linux</option>
+            <option value="android">Android</option>
+            <option value="ios">iOS / macOS</option>
+          </select>
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">Link Type</span>
+          <input class="flt-input" id="flt-link" placeholder="e.g. OpenVPN, IPIP" oninput="applyFilters()">
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">Fraud Score (max)</span>
+          <input class="flt-input" id="flt-score-max" type="number" placeholder="0–100" min="0" max="100" oninput="applyFilters()">
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">Latency max (ms)</span>
+          <input class="flt-input" id="flt-lat-max" type="number" placeholder="e.g. 3000" min="0" oninput="applyFilters()">
+        </div>
+        <div class="flt-group">
+          <span class="flt-label">Risk Level</span>
+          <select class="flt-input" id="flt-risk" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="very high">Very High</option>
+          </select>
+        </div>
+      </div>
+      <div class="flt-row2" style="margin-top:10px">
+        <span class="flt-label" style="margin-right:4px">Proxy type:</span>
+        <label class="flt-chip"><input type="checkbox" id="flt-vpn" onchange="applyFilters()"> VPN</label>
+        <label class="flt-chip"><input type="checkbox" id="flt-dc" onchange="applyFilters()"> Datacenter</label>
+        <label class="flt-chip"><input type="checkbox" id="flt-tor" onchange="applyFilters()"> Tor</label>
+        <label class="flt-chip"><input type="checkbox" id="flt-proxy" onchange="applyFilters()"> Proxy flagged</label>
+        <label class="flt-chip"><input type="checkbox" id="flt-blacklisted" onchange="applyFilters()"> Blacklisted</label>
+        <label class="flt-chip"><input type="checkbox" id="flt-h2" onchange="applyFilters()"> HTTP/2</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Saved Proxy Library (hidden) -->
+  <div id="lib-panel" style="display:none">
+    <div class="lib-header">
+      <span class="lib-title">&#128190; Proxy Library</span>
+      <span id="lib-total-badge" style="font-size:10px;color:var(--dim);font-weight:400;margin-right:auto"></span>
+      <button class="btn btn-ghost btn-sm" onclick="libLoad()" title="Load saved proxies into input">&#8601; Load into input</button>
+      <button class="btn btn-ghost btn-sm" onclick="libExport()" title="Export as .txt">&#8593; Export .txt</button>
+      <button class="btn btn-ghost btn-sm" style="color:#e05252" onclick="libClearAll()" title="Delete all saved proxies">&#128465; Clear all</button>
+    </div>
+    <div class="lib-list" id="lib-list">
+      <div class="lib-empty" id="lib-empty">No saved proxies yet. Run a check to auto-save OK proxies.</div>
+    </div>
   </div>
 
   <!-- Table -->
@@ -201,10 +328,12 @@ td.mono{font-family:var(--mono);font-size:11px}
           <th style="min-width:100px">Country</th>
           <th>City</th>
           <th style="max-width:150px">ISP</th>
+          <th style="width:80px">Usage</th>
           <th style="width:85px">OS</th>
           <th style="width:50px">MTU</th>
           <th style="max-width:120px">Link Type</th>
           <th style="width:155px">JA4T</th>
+          <th style="width:75px">Risk</th>
           <th style="width:36px"></th>
         </tr>
       </thead>
@@ -215,7 +344,7 @@ td.mono{font-family:var(--mono);font-size:11px}
 
 <script>
 'use strict';
-let results=[], filter='all', es=null;
+let results=[], es=null;
 
 document.getElementById('proxy-input').addEventListener('input',()=>{
   const n=document.getElementById('proxy-input').value.split('\n').filter(l=>l.trim()).length;
@@ -239,6 +368,19 @@ function latCls(ms){if(!ms)return'';return ms<1500?'lat-f':ms<4000?'lat-m':'lat-
 function latFmt(ms){if(!ms)return'—';return ms>=1000?(ms/1000).toFixed(1)+'s':ms+'ms';}
 function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function v(x){return esc(x)||'<span style="color:var(--dim)">—</span>';}
+function riskBadge(r){
+  if(r.sc_is_vpn) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(88,166,255,.15);color:#58a6ff;font-weight:600">VPN</span>';
+  if(r.sc_is_tor) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(139,148,158,.15);color:#8b949e;font-weight:600">Tor</span>';
+  if(r.sc_is_dc)  return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(210,153,34,.15);color:#d29922;font-weight:600">DC</span>';
+  const u=(r.usage||'').toLowerCase();
+  if(u.includes('cellular')||u.includes('mobile')) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(63,185,80,.1);color:#3fb950;font-weight:600">Cellular</span>';
+  if(u.includes('residential')) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(63,185,80,.12);color:#3fb950;font-weight:600">Resi</span>';
+  const risk=(r.sc_risk||'').toLowerCase();
+  if(risk==='high'||risk==='very high') return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(248,81,73,.15);color:#f85149;font-weight:600">High Risk</span>';
+  if(risk==='medium') return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(210,153,34,.12);color:#d29922;font-weight:600">Medium</span>';
+  if(r.sc_score!==''&&r.sc_score!==undefined) return '<span style="font-size:10px;color:var(--dim)">'+r.sc_score+'</span>';
+  return '<span style="color:var(--dim)">—</span>';
+}
 
 function mkRow(r,idx){
   const st=r.status==='ok'?'<span class="badge ok">✓ OK</span>':'<span class="badge err">✗ ERR</span>';
@@ -256,10 +398,12 @@ function mkRow(r,idx){
     <td style="max-width:150px" title="${esc(r.country)}">${country}</td>
     <td>${esc(r.city)||'—'}</td>
     <td style="max-width:150px" title="${esc(r.isp)}">${esc(r.isp)||'—'}</td>
+    <td style="font-size:11px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.usage)}">${esc(r.usage)||'—'}</td>
     <td>${osBadge(r.tcp_os)}</td>
     <td style="color:${r.tcp_mtu?'var(--text)':'var(--dim)'}">${esc(r.tcp_mtu)||'—'}</td>
     <td style="max-width:120px;font-size:11px" title="${esc(r.tcp_link)}">${esc(r.tcp_link)||'—'}</td>
     <td class="mono" style="font-size:10px;max-width:160px" title="${esc(r.tcp_ja4t)}">${esc(r.tcp_ja4t)||'—'}</td>
+    <td>${riskBadge(r)}</td>
     <td><button class="btn btn-ghost btn-sm" title="Details" onclick="toggleDetail(this,${idx},event)">⊕</button></td>
   `;
   return tr;
@@ -268,7 +412,7 @@ function mkRow(r,idx){
 function mkDetailRow(r){
   const tr=document.createElement('tr');
   tr.className='drow';
-  tr.innerHTML=`<td colspan="13">
+  tr.innerHTML=`<td colspan="15">
     <div class="dcontent">
       <div>
         <div class="dsec-title">📍 IP &amp; Location</div>
@@ -367,22 +511,129 @@ function updStats(){
   document.getElementById('prog-bar').style.width=pct+'%';
 }
 
-function setFilter(f){
-  filter=f;
-  document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
+// ── Filter state ──────────────────────────────────────────────────────────────
+let qfilter = 'all'; // quick filter: all / ok / error
+
+function g(id){ return document.getElementById(id); }
+function gv(id){ return (g(id)?.value||'').trim().toLowerCase(); }
+function gc(id){ return g(id)?.checked||false; }
+
+function toggleFltPanel(){
+  const p=g('flt-panel');
+  p.classList.toggle('open');
+  g('flt-toggle-btn').classList.toggle('on', p.classList.contains('open'));
+}
+
+function setQFilter(f){
+  qfilter=f;
+  document.querySelectorAll('.fbtn[data-f]').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
+  applyFilters();
+}
+
+// Rebuild country dropdown from current results
+function rebuildCountrySelect(){
+  const sel=g('flt-country');
+  const cur=sel.value;
+  const countries=[...new Set(results.map(r=>r.country).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">All countries</option>'+countries.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  sel.value=cur;
+}
+
+function matchFilter(r){
+  // Quick status filter
+  if(qfilter==='ok'    && r.status!=='ok')    return false;
+  if(qfilter==='error' && r.status!=='error') return false;
+
+  // Search
+  const q=gv('flt-search');
+  if(q){
+    const hay=[r.proxy,r.ip,r.country,r.city,r.isp,r.org,r.hostname,r.network].join(' ').toLowerCase();
+    if(!hay.includes(q)) return false;
+  }
+  // Country
+  const fCountry=gv('flt-country');
+  if(fCountry && (r.country||'').toLowerCase()!==fCountry.toLowerCase()) return false;
+  // ISP
+  const fIsp=gv('flt-isp');
+  if(fIsp && !(r.isp||'').toLowerCase().includes(fIsp) && !(r.org||'').toLowerCase().includes(fIsp)) return false;
+  // Usage
+  const fUsage=gv('flt-usage');
+  if(fUsage && !(r.usage||'').toLowerCase().includes(fUsage)) return false;
+  // OS
+  const fOs=gv('flt-os');
+  if(fOs && !(r.tcp_os||'').toLowerCase().includes(fOs)) return false;
+  // Link type
+  const fLink=gv('flt-link');
+  if(fLink && !(r.tcp_link||'').toLowerCase().includes(fLink)) return false;
+  // Risk level
+  const fRisk=gv('flt-risk');
+  if(fRisk && (r.sc_risk||'').toLowerCase()!==fRisk) return false;
+  // Fraud score max
+  const fScoreMax=g('flt-score-max').value;
+  if(fScoreMax!=='' && r.sc_score!==undefined && r.sc_score!=='' && Number(r.sc_score)>Number(fScoreMax)) return false;
+  // Latency max
+  const fLatMax=g('flt-lat-max').value;
+  if(fLatMax!=='' && r.latency && r.latency>Number(fLatMax)) return false;
+  // Checkboxes
+  if(gc('flt-vpn')         && !r.sc_is_vpn)        return false;
+  if(gc('flt-dc')          && !r.sc_is_dc)         return false;
+  if(gc('flt-tor')         && !r.sc_is_tor)        return false;
+  if(gc('flt-proxy')       && !r.sc_is_proxy)      return false;
+  if(gc('flt-blacklisted') && !r.sc_blacklisted)   return false;
+  if(gc('flt-h2')          && !r.h2_akamai)        return false;
+  return true;
+}
+
+function countActiveFilters(){
+  let n=0;
+  if(gv('flt-search'))    n++;
+  if(gv('flt-country'))   n++;
+  if(gv('flt-isp'))       n++;
+  if(gv('flt-usage'))     n++;
+  if(gv('flt-os'))        n++;
+  if(gv('flt-link'))      n++;
+  if(gv('flt-risk'))      n++;
+  if(g('flt-score-max').value!=='') n++;
+  if(g('flt-lat-max').value!=='')   n++;
+  ['flt-vpn','flt-dc','flt-tor','flt-proxy','flt-blacklisted','flt-h2'].forEach(id=>{if(gc(id))n++;});
+  return n;
+}
+
+function applyFilters(){
+  const n=countActiveFilters();
+  const badge=g('flt-badge');
+  badge.textContent=n; badge.style.display=n?'':'none';
+  g('flt-clear-btn').style.display=n||qfilter!=='all'?'':'none';
   renderAll();
 }
 
+function clearFilters(){
+  qfilter='all';
+  document.querySelectorAll('.fbtn[data-f]').forEach(b=>b.classList.toggle('on',b.dataset.f==='all'));
+  ['flt-search','flt-isp','flt-link'].forEach(id=>g(id).value='');
+  ['flt-country','flt-usage','flt-os','flt-risk'].forEach(id=>g(id).value='');
+  ['flt-score-max','flt-lat-max'].forEach(id=>g(id).value='');
+  ['flt-vpn','flt-dc','flt-tor','flt-proxy','flt-blacklisted','flt-h2'].forEach(id=>g(id).checked=false);
+  applyFilters();
+}
+
+// Legacy alias used elsewhere
+function setFilter(f){ setQFilter(f); }
+
 function renderAll(){
-  const tbody=document.getElementById('tbody');tbody.innerHTML='';
-  results.filter(r=>filter==='all'||r.status===filter)
-    .forEach(r=>tbody.appendChild(mkRow(r,results.indexOf(r))));
+  const tbody=g('tbody'); tbody.innerHTML='';
+  const filtered=results.filter(matchFilter);
+  filtered.forEach(r=>tbody.appendChild(mkRow(r,results.indexOf(r))));
+  const cnt=g('flt-result-count');
+  if(cnt) cnt.textContent=filtered.length<results.length?`${filtered.length} / ${results.length} shown`:'';
 }
 
 function appendRow(r){
-  if(filter==='all'||r.status===filter){
-    document.getElementById('tbody').appendChild(mkRow(r,results.indexOf(r)));
-  }
+  rebuildCountrySelect();
+  if(matchFilter(r)) g('tbody').appendChild(mkRow(r,results.indexOf(r)));
+  // Update count
+  const cnt=g('flt-result-count');
+  if(cnt){ const shown=g('tbody').querySelectorAll('tr[data-idx]').length; cnt.textContent=shown<results.length?`${shown} / ${results.length} shown`:''; }
 }
 
 async function startCheck(){
@@ -436,6 +687,67 @@ function clearAll(){
   document.getElementById('toolbar').style.display='none';
   resetBtns();
 }
+
+// ── Proxy Library ────────────────────────────────────────────────────────────
+let _libItems = [];
+
+async function libRefresh() {
+  try {
+    const d = await fetch('/api/library').then(r => r.json());
+    _libItems = d.items || [];
+    libRender();
+  } catch(_){}
+}
+
+function libRender() {
+  const list = document.getElementById('lib-list');
+  const badge = document.getElementById('lib-total-badge');
+  badge.textContent = _libItems.length ? `(${_libItems.length})` : '';
+  if (!_libItems.length) {
+    list.innerHTML = '<div class="lib-empty">No saved proxies yet. Run a check to auto-save OK proxies.</div>';
+    return;
+  }
+  const riskColor = {high:'#e05252',medium:'#e0a052',low:'#52b052',none:'var(--dim)'};
+  list.innerHTML = _libItems.map(item => {
+    const risk = item.sc_risk || '';
+    const score = item.sc_score !== '' && item.sc_score != null ? ` ${item.sc_score}%` : '';
+    const tags = [item.sc_is_vpn&&'VPN',item.sc_is_dc&&'DC',item.sc_is_tor&&'TOR'].filter(Boolean);
+    return `<div class="lib-item" data-proxy="${encodeURIComponent(item.proxy)}">
+      <span class="lib-item-proxy" title="${item.proxy}">${item.proxy}</span>
+      <span class="lib-item-meta">${item.ip||''}${item.country?' &bull; '+item.country:''}</span>
+      ${risk?`<span class="lib-item-risk" style="color:${riskColor[risk]||'var(--dim)'}">${risk}${score}</span>`:''}
+      ${tags.length?`<span class="lib-item-tags">${tags.join(' ')}</span>`:''}
+      <button class="btn btn-ghost btn-xs lib-del" onclick="libDelete('${encodeURIComponent(item.proxy)}')" title="Remove">&#215;</button>
+    </div>`;
+  }).join('');
+}
+
+async function libDelete(encodedProxy) {
+  await fetch('/api/library/' + encodedProxy, { method: 'DELETE' });
+  await libRefresh();
+}
+
+async function libClearAll() {
+  if (!confirm(`Delete all ${_libItems.length} saved proxies?`)) return;
+  await fetch('/api/library', { method: 'DELETE' });
+  await libRefresh();
+}
+
+function libLoad() {
+  if (!_libItems.length) return;
+  const ta = document.getElementById('proxy-input');
+  const existing = ta.value.trim().split(/\s+/).filter(Boolean);
+  const news = _libItems.map(i => i.proxy).filter(p => !existing.includes(p));
+  ta.value = [...existing, ...news].join('\n');
+  document.getElementById('proxy-count').textContent = ta.value.trim().split(/\s+/).filter(Boolean).length + ' proxies';
+}
+
+function libExport() {
+  window.location.href = '/api/library/export';
+}
+
+// Initial load
+// libRefresh(); // hidden
 
 function exportCsv(){
   if(!results.length)return;

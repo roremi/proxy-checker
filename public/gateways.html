@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VPN-Proxy Gateways</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--blue:#58a6ff;--green:#3fb950;--red:#f85149;--orange:#d29922;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;padding:24px}
+h1{font-size:20px;margin-bottom:4px}
+.sub{color:var(--dim);font-size:12px;margin-bottom:24px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:16px}
+.card h2{font-size:14px;font-weight:600;margin-bottom:12px;color:var(--blue)}
+input{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 12px;font-size:13px;outline:none;width:100%}
+input:focus{border-color:var(--blue)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:6px;cursor:pointer;font-size:13px}
+.btn:hover{background:var(--border)}
+.btn-blue{background:var(--blue);border-color:var(--blue);color:#0d1117}.btn-blue:hover{opacity:.9}
+.btn-red{border-color:var(--red);color:var(--red)}.btn-red:hover{background:rgba(248,81,73,.1)}
+.btn-sm{padding:4px 10px;font-size:12px}
+.row{display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:12px;align-items:end}
+.row label{font-size:11px;color:var(--dim);display:block;margin-bottom:4px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--dim);font-weight:500;font-size:11px;text-transform:uppercase}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface2)}
+.mono{font-family:monospace;font-size:12px}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-green{background:rgba(63,185,80,.15);color:var(--green)}
+.badge-red{background:rgba(248,81,73,.15);color:var(--red)}
+.badge-orange{background:rgba(210,153,34,.15);color:var(--orange)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+#login-overlay{position:fixed;inset:0;background:var(--bg);z-index:200;display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px;width:320px}
+.login-box h2{font-size:16px;margin-bottom:20px;text-align:center}
+.err{color:var(--red);font-size:12px;margin-top:8px;text-align:center}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px;max-width:560px;width:90%;max-height:90vh;overflow-y:auto}
+.modal h3{font-size:15px;margin-bottom:16px}
+.conf-box{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:monospace;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:240px;overflow-y:auto;margin-bottom:12px}
+.warn{background:rgba(210,153,34,.08);border:1px solid rgba(210,153,34,.3);color:var(--orange);padding:10px 14px;border-radius:6px;font-size:12px;margin-bottom:16px}
+</style>
+</head>
+<body>
+
+<nav style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:4px;align-items:center;margin:-24px -24px 20px">
+  <strong style="color:var(--blue);margin-right:16px">⚡ Proxy Checker</strong>
+  <a href="/" style="color:var(--dim);font-size:13px;padding:6px 12px;border-radius:6px;text-decoration:none">Checker</a>
+  <a href="/gateways.html" style="background:var(--surface2);color:var(--blue);font-size:13px;padding:6px 12px;border-radius:6px;text-decoration:none">Gateways</a>
+</nav>
+
+<div id="main">
+  <h1>🛡️ VPN-Proxy Gateways</h1>
+  <div class="sub">Route VPN client traffic through a SOCKS5 proxy. Supports TCP+UDP+DNS via tun2socks.</div>
+
+  <div class="warn">
+    <strong>✓ Auto-detect:</strong> Accepts SOCKS5 or HTTP proxy in any format — <code>scheme://user:pass@host:port</code>, <code>host:port:user:pass</code>, or <code>host:port</code>. The server auto-detects protocol via live test.<br>
+    <strong>⚠ For full UDP/DNS support</strong>, use <strong>SOCKS5 with UDP ASSOCIATE</strong>. HTTP proxies carry only TCP — DNS will be blocked by the leak-prevention chain.
+  </div>
+
+  <div class="card">
+    <h2>Create New Gateway</h2>
+    <div class="row">
+      <div><label>Gateway Name</label><input id="gw-name" placeholder="us-chicago-1" maxlength="24"></div>
+      <div><label>Proxy URL (SOCKS5 / HTTP — auto-detect)</label><input id="gw-proxy" placeholder="host:port:user:pass  or  socks5://user:pass@host:port"></div>
+      <div><label>VPN Port (optional)</label><input id="gw-port" type="number" placeholder="auto"></div>
+      <button class="btn btn-blue" onclick="createGateway()">+ Create</button>
+    </div>
+    <div style="font-size:11px;color:var(--dim);margin-top:8px">Proxy will be live-tested before creation.</div>
+  </div>
+
+  <div class="card">
+    <h2>Active Gateways</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Status</th><th>Port</th><th>Exit IP</th><th>Clients</th><th>Actions</th></tr></thead>
+      <tbody id="gw-tbody"><tr><td colspan="6" style="color:var(--dim);text-align:center;padding:20px">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal-overlay" id="client-modal">
+  <div class="modal">
+    <h3>📱 New Client for <span id="cm-gw"></span></h3>
+    <div class="row" style="grid-template-columns:1fr auto">
+      <div><label>Client Name</label><input id="cm-name" placeholder="router1, phone, laptop"></div>
+      <button class="btn btn-blue" onclick="createClient()">Generate</button>
+    </div>
+    <div id="cm-result" style="display:none;margin-top:12px">
+      <div class="conf-box" id="cm-conf"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-blue btn-sm" onclick="cmDownload()">⬇ Download .ovpn</button>
+        <button class="btn btn-sm" onclick="cmCopy()">📋 Copy</button>
+        <button class="btn btn-sm" style="margin-left:auto" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+    <div style="text-align:right;margin-top:12px"><button class="btn btn-sm" onclick="closeModal()">Cancel</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const TOKEN='vpnadmin2026';
+let _cmGw='', _cmName='', _cmConf='';
+async function fetchApi(url,opts={}){opts.headers={...(opts.headers||{}),'x-vpn-token':TOKEN,'Content-Type':'application/json'};
+  const r=await fetch(url,opts);if(r.status===401)throw new Error('Unauthorized');const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'API Error');return d;}
+async function loadGateways(){try{const d=await fetchApi('/api/gateways');const tb=document.getElementById('gw-tbody');
+  if(!d.gateways.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--dim);text-align:center;padding:20px">No gateways yet.</td></tr>';return;}
+  tb.innerHTML=d.gateways.map(g=>{let b;const running=g.vpn_running&&g.tun_running;
+    if(running)b='<span class="badge badge-green">Running</span>';
+    else if(!g.vpn_running&&!g.tun_running)b='<span class="badge badge-red">Stopped</span>';
+    else b='<span class="badge badge-orange">Partial</span>';
+    return `<tr><td><strong>${esc(g.name)}</strong><div style="font-size:10px;color:var(--dim)">${esc(g.proxy_display||'')}</div></td>
+      <td>${b}</td><td class="mono">${g.vpn_port}</td>
+      <td class="mono">${esc(g.exit_ip||'?')} <button class="btn btn-sm" style="padding:2px 6px;font-size:10px" onclick="retest('${esc(g.name)}')">↻</button></td>
+      <td class="mono">${g.client_count||0}</td>
+      <td><button class="btn btn-sm btn-blue" onclick="openClient('${esc(g.name)}')">+ Client</button>
+        <button class="btn btn-sm" onclick="toggleGw('${esc(g.name)}',${running})">${running?'Stop':'Start'}</button>
+        <button class="btn btn-sm" onclick="restartGw('${esc(g.name)}')">Restart</button>
+        <button class="btn btn-sm btn-red" onclick="deleteGw('${esc(g.name)}')">Delete</button></td></tr>`;
+  }).join('');}catch(e){toast(e.message,true);}}
+async function createGateway(){const name=document.getElementById('gw-name').value.trim();const proxy_url=document.getElementById('gw-proxy').value.trim();
+  const vpn_port=parseInt(document.getElementById('gw-port').value,10)||undefined;if(!name||!proxy_url)return toast('Name and proxy required',true);
+  const btn=document.querySelector('[onclick="createGateway()"]');btn.textContent='Testing...';btn.disabled=true;
+  try{const body={name,proxy_url};if(vpn_port)body.vpn_port=vpn_port;const d=await fetchApi('/api/gateways',{method:'POST',body:JSON.stringify(body)});toast(`Created on port ${d.vpn_port}. Exit IP: ${d.exit_ip}`);
+    ['gw-name','gw-proxy','gw-port'].forEach(id=>document.getElementById(id).value='');loadGateways();}
+  catch(e){toast(e.message,true);}finally{btn.textContent='+ Create';btn.disabled=false;}}
+async function deleteGw(name){if(!confirm(`Delete "${name}"?`))return;try{await fetchApi(`/api/gateways/${encodeURIComponent(name)}`,{method:'DELETE'});toast('Deleted');loadGateways();}catch(e){toast(e.message,true);}}
+async function toggleGw(name,running){const a=running?'stop':'start';try{await fetchApi(`/api/gateways/${encodeURIComponent(name)}/${a}`,{method:'POST'});toast(a+'ped');setTimeout(loadGateways,2000);}catch(e){toast(e.message,true);}}
+async function restartGw(name){try{await fetchApi(`/api/gateways/${encodeURIComponent(name)}/restart`,{method:'POST'});toast('Restarted');setTimeout(loadGateways,2000);}catch(e){toast(e.message,true);}}
+async function retest(name){try{const d=await fetchApi(`/api/gateways/${encodeURIComponent(name)}/test`,{method:'POST'});toast('Exit IP: '+d.exit_ip);loadGateways();}catch(e){toast(e.message,true);}}
+function openClient(name){_cmGw=name;document.getElementById('cm-gw').textContent=name;document.getElementById('cm-name').value='';document.getElementById('cm-result').style.display='none';document.getElementById('client-modal').classList.add('open');document.getElementById('cm-name').focus();}
+async function createClient(){const cn=document.getElementById('cm-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');if(!cn)return toast('Enter a client name',true);
+  const btn=document.querySelector('[onclick="createClient()"]');btn.textContent='Generating...';btn.disabled=true;
+  try{const d=await fetchApi(`/api/gateways/${encodeURIComponent(_cmGw)}/client`,{method:'POST',body:JSON.stringify({client_name:cn})});
+    _cmName=cn;_cmConf=d.ovpn;document.getElementById('cm-conf').textContent=d.ovpn;document.getElementById('cm-result').style.display='block';loadGateways();toast('Client created');}
+  catch(e){toast(e.message,true);}finally{btn.textContent='Generate';btn.disabled=false;}}
+function cmDownload(){const b=new Blob([_cmConf],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=`${_cmGw}_${_cmName}.ovpn`;a.click();}
+function cmCopy(){navigator.clipboard.writeText(_cmConf).then(()=>toast('Copied!'));}
+function closeModal(){document.getElementById('client-modal').classList.remove('open');}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+let _tt;function toast(m,err){const el=document.getElementById('toast');el.textContent=m;el.style.borderColor=err?'var(--red)':'var(--border)';el.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>el.classList.remove('show'),4000);}
+document.getElementById('client-modal').addEventListener('click',e=>{if(e.target===document.getElementById('client-modal'))closeModal();});
+loadGateways();setInterval(loadGateways,15000);
+</script>
+</body>
+</html>

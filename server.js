@@ -6,6 +6,7 @@ const cheerio = require('cheerio');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 const { randomUUID } = require('crypto');
+const fs   = require('fs');
 const path = require('path');
 
 const app = express();
@@ -35,6 +36,69 @@ function parseProxyUrl(raw) {
 function createAgent(proxyUrl) {
   if (/^socks/i.test(proxyUrl)) return new SocksProxyAgent(proxyUrl);
   return new HttpsProxyAgent(proxyUrl);
+}
+
+// Flexible proxy parser → returns { host, port, user, pass } or null.
+// Accepts: scheme://[user:pass@]host:port  |  host:port:user:pass  |  host:port
+function parseProxyFlex(raw) {
+  if (!raw) return null;
+  raw = String(raw).trim();
+  // With scheme
+  const m = raw.match(/^(?:socks[45]?h?|http|https):\/\/(.+)$/i);
+  const body = m ? m[1] : raw;
+  // user:pass@host:port
+  const at = body.lastIndexOf('@');
+  if (at !== -1) {
+    const creds = body.slice(0, at);
+    const hp = body.slice(at + 1);
+    const ci = creds.indexOf(':');
+    const hi = hp.indexOf(':');
+    if (hi === -1) return null;
+    return {
+      user: ci === -1 ? creds : creds.slice(0, ci),
+      pass: ci === -1 ? '' : creds.slice(ci + 1),
+      host: hp.slice(0, hi),
+      port: hp.slice(hi + 1),
+    };
+  }
+  // host:port:user:pass (split on first 3 colons only — password may contain ':')
+  const parts = body.split(':');
+  if (parts.length >= 4) {
+    return { host: parts[0], port: parts[1], user: parts[2], pass: parts.slice(3).join(':') };
+  }
+  if (parts.length === 2) return { host: parts[0], port: parts[1], user: '', pass: '' };
+  return null;
+}
+
+function buildProxyUrl(scheme, p) {
+  const creds = p.user ? `${encodeURIComponent(p.user)}:${encodeURIComponent(p.pass || '')}@` : '';
+  return `${scheme}://${creds}${p.host}:${p.port}`;
+}
+
+// Auto-detect proxy protocol by live-testing SOCKS5 first, then HTTP CONNECT.
+// Returns { scheme, url, exitIp }. Throws on all failures.
+async function detectAndTestProxy(rawInput) {
+  const p = parseProxyFlex(rawInput);
+  if (!p || !p.host || !p.port) throw new Error('Cannot parse proxy');
+  // If user specified scheme, honour it only — do not fallback.
+  const schemeMatch = String(rawInput).trim().match(/^(socks[45]?h?|http|https):\/\//i);
+  const forced = schemeMatch ? schemeMatch[1].toLowerCase().replace('socks4a','socks4').replace('socks5h','socks5') : null;
+  const order = forced
+    ? [forced === 'http' || forced === 'https' ? 'http' : 'socks5']
+    : ['socks5', 'http'];
+  const errs = [];
+  for (const sch of order) {
+    const url = buildProxyUrl(sch, p);
+    try {
+      const agent = sch === 'socks5' ? new SocksProxyAgent(url) : new HttpsProxyAgent(url);
+      const r = await axios.get('https://api.ipify.org?format=json', {
+        httpsAgent: agent, httpAgent: agent, timeout: 15000,
+      });
+      if (r.data && r.data.ip) return { scheme: sch, url, exitIp: r.data.ip, parsed: p };
+      errs.push(`${sch}: no IP in response`);
+    } catch(e) { errs.push(`${sch}: ${e.code || e.message}`); }
+  }
+  throw new Error(errs.join(' | '));
 }
 
 // ── Shared axios config ──────────────────────────────────────────────────────
@@ -286,7 +350,58 @@ async function checkProxy(raw, timeout = 30000) {
   }
 }
 
-// ── SSE broadcast ────────────────────────────────────────────────────────────
+// ── Proxy Library (persistent, deduped) ──────────────────────────────────────
+const LIB_FILE = path.join(__dirname, 'proxy-library.json');
+
+function libLoad() {
+  try { return JSON.parse(fs.readFileSync(LIB_FILE, 'utf8')); }
+  catch (_) { return {}; }  // { proxy_string: { proxy, ip, country, isp, usage, sc_risk, sc_score, saved_at } }
+}
+
+function libSave(data) {
+  fs.writeFileSync(LIB_FILE, JSON.stringify(data, null, 2));
+}
+
+function libAddResults(results) {
+  const lib = libLoad();
+  let added = 0;
+  for (const r of results) {
+    if (r.status !== 'ok' || !r.proxy) continue;
+    if (!lib[r.proxy]) {
+      lib[r.proxy] = {
+        proxy:    r.proxy,
+        ip:       r.ip       || '',
+        country:  r.country  || '',
+        city:     r.city     || '',
+        isp:      r.isp      || '',
+        usage:    r.usage    || '',
+        tcp_os:   r.tcp_os   || '',
+        sc_risk:  r.sc_risk  || '',
+        sc_score: r.sc_score ?? '',
+        sc_is_vpn: r.sc_is_vpn || false,
+        sc_is_dc:  r.sc_is_dc  || false,
+        sc_is_tor: r.sc_is_tor || false,
+        saved_at: new Date().toISOString(),
+      };
+      added++;
+    } else {
+      // Update metadata but keep original saved_at
+      Object.assign(lib[r.proxy], {
+        ip: r.ip||lib[r.proxy].ip, country: r.country||lib[r.proxy].country,
+        city: r.city||lib[r.proxy].city, isp: r.isp||lib[r.proxy].isp,
+        usage: r.usage||lib[r.proxy].usage, tcp_os: r.tcp_os||lib[r.proxy].tcp_os,
+        sc_risk: r.sc_risk||lib[r.proxy].sc_risk, sc_score: r.sc_score??lib[r.proxy].sc_score,
+        sc_is_vpn: r.sc_is_vpn||lib[r.proxy].sc_is_vpn,
+        sc_is_dc:  r.sc_is_dc ||lib[r.proxy].sc_is_dc,
+        sc_is_tor: r.sc_is_tor||lib[r.proxy].sc_is_tor,
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }
+  libSave(lib);
+  return added;
+}
+
 function broadcast(jobId, payload) {
   const clients = sseClients.get(jobId);
   if (!clients || clients.size === 0) return;
@@ -309,6 +424,8 @@ async function runJob(jobId, proxies, concurrency, timeout) {
       broadcast(jobId, { type: 'result', result, done: job.done, total: job.total });
       if (job.done >= job.total) {
         broadcast(jobId, { type: 'done' });
+        // Auto-save all OK proxies to library
+        libAddResults(job.results);
         setTimeout(() => { jobs.delete(jobId); sseClients.delete(jobId); }, 600_000);
       }
     }
@@ -317,6 +434,698 @@ async function runJob(jobId, proxies, concurrency, timeout) {
   const workers = Math.min(concurrency, proxies.length);
   await Promise.allSettled(Array.from({ length: workers }, worker));
 }
+
+const { execSync, exec } = require('child_process');
+
+// ── VPN Management ────────────────────────────────────────────────────────────
+const WG_CONF    = '/etc/wireguard/wg0.conf';
+const WG_DIR     = '/etc/wireguard';
+const WG_DATA    = path.join(__dirname, 'vpn-clients.json');
+const SS_CONF    = '/etc/shadowsocks-libev/config.json';
+const SERVER_IP  = '103.162.14.102';
+const VPN_TOKEN  = process.env.VPN_TOKEN || 'vpnadmin2026';
+
+function wgLoadClients() {
+  try { return JSON.parse(fs.readFileSync(WG_DATA, 'utf8')); } catch(_) { return {}; }
+}
+function wgSaveClients(data) { fs.writeFileSync(WG_DATA, JSON.stringify(data, null, 2)); }
+
+function wgNextIp(clients) {
+  const used = new Set(Object.values(clients).map(c => c.ip));
+  for (let i = 2; i <= 254; i++) {
+    const ip = `10.8.0.${i}`;
+    if (!used.has(ip)) return ip;
+  }
+  throw new Error('No IPs available');
+}
+
+function wgCreateClient(name) {
+  const privKey = execSync('wg genkey').toString().trim();
+  const pubKey  = execSync(`echo "${privKey}" | wg pubkey`).toString().trim();
+  const psk     = execSync('wg genpsk').toString().trim();
+  const clients = wgLoadClients();
+  const ip      = wgNextIp(clients);
+  const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
+
+  // Add peer to server config
+  const peer = `\n[Peer]\n# ${name}\nPublicKey = ${pubKey}\nPresharedKey = ${psk}\nAllowedIPs = ${ip}/32\n`;
+  fs.appendFileSync(WG_CONF, peer);
+  execSync(`wg addconf wg0 <(printf '[Peer]\\nPublicKey = ${pubKey}\\nPresharedKey = ${psk}\\nAllowedIPs = ${ip}/32\\n')`, { shell: '/bin/bash' });
+
+  clients[name] = { name, ip, pubKey, privKey, psk, createdAt: new Date().toISOString() };
+  wgSaveClients(clients);
+
+  // Build client .conf text
+  const conf = `[Interface]
+PrivateKey = ${privKey}
+Address = ${ip}/24
+DNS = 1.1.1.1, 8.8.8.8
+
+[Peer]
+PublicKey = ${serverPub}
+PresharedKey = ${psk}
+Endpoint = ${SERVER_IP}:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25
+`;
+  return { name, ip, conf };
+}
+
+function wgDeleteClient(name) {
+  const clients = wgLoadClients();
+  const c = clients[name];
+  if (!c) return false;
+  // Remove from running wg
+  try { execSync(`wg set wg0 peer ${c.pubKey} remove`); } catch(_){}
+  // Rewrite conf without this peer
+  const raw = fs.readFileSync(WG_CONF, 'utf8');
+  const cleaned = raw.replace(new RegExp(`\\n\\[Peer\\]\\n# ${name}\\n[\\s\\S]*?(?=\\n\\[Peer\\]|$)`, 'g'), '');
+  fs.writeFileSync(WG_CONF, cleaned);
+  delete clients[name];
+  wgSaveClients(clients);
+  return true;
+}
+
+function ssGetConfig() {
+  try { return JSON.parse(fs.readFileSync(SS_CONF, 'utf8')); } catch(_) { return null; }
+}
+
+function ssLink(cfg) {
+  const b64 = Buffer.from(`${cfg.method}:${cfg.password}`).toString('base64');
+  return `ss://${b64}@${SERVER_IP}:${cfg.server_port}`;
+}
+
+// ── VPN API routes ─────────────────────────────────────────────────────────────
+function requireVpnToken(req, res, next) {
+  const token = req.headers['x-vpn-token'] || req.query.token;
+  if (token !== VPN_TOKEN) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+// WireGuard: list clients
+app.get('/api/vpn/wg/clients', requireVpnToken, (req, res) => {
+  const clients = wgLoadClients();
+  res.json({ count: Object.keys(clients).length, clients: Object.values(clients).map(c => ({ name: c.name, ip: c.ip, createdAt: c.createdAt })) });
+});
+
+// WireGuard: create client
+app.post('/api/vpn/wg/client', requireVpnToken, (req, res) => {
+  const name = (req.body.name || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+  if (!name) return res.status(400).json({ error: 'Invalid name' });
+  const clients = wgLoadClients();
+  if (clients[name]) return res.status(409).json({ error: 'Client already exists' });
+  try {
+    const result = wgCreateClient(name);
+    // Generate QR
+    const qr = execSync(`echo "${result.conf.replace(/"/g,'\\"')}" | qrencode -t png -o -`, { maxBuffer: 2*1024*1024 });
+    result.qr = `data:image/png;base64,${qr.toString('base64')}`;
+    res.json(result);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// WireGuard: delete client
+app.delete('/api/vpn/wg/client/:name', requireVpnToken, (req, res) => {
+  const ok = wgDeleteClient(req.params.name);
+  if (!ok) return res.status(404).json({ error: 'Not found' });
+  res.json({ ok: true });
+});
+
+// WireGuard: download .conf
+app.get('/api/vpn/wg/client/:name/conf', requireVpnToken, (req, res) => {
+  const clients = wgLoadClients();
+  const c = clients[req.params.name];
+  if (!c) return res.status(404).end();
+  const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
+  const conf = `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/24\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Content-Disposition', `attachment; filename="${c.name}.conf"`);
+  res.send(conf);
+});
+
+// WireGuard: QR code
+app.get('/api/vpn/wg/client/:name/qr', requireVpnToken, (req, res) => {
+  const clients = wgLoadClients();
+  const c = clients[req.params.name];
+  if (!c) return res.status(404).end();
+  const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
+  const conf = `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/24\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+  try {
+    const qr = execSync(`printf '%s' "${conf.replace(/'/g,"'\\''").replace(/"/g,'\\"')}" | qrencode -t png -o -`, { shell: '/bin/bash', maxBuffer: 2*1024*1024 });
+    res.setHeader('Content-Type', 'image/png');
+    res.send(qr);
+  } catch(e) { res.status(500).end(); }
+});
+
+// Shadowsocks: get info
+app.get('/api/vpn/ss/info', requireVpnToken, (req, res) => {
+  const cfg = ssGetConfig();
+  if (!cfg) return res.status(500).json({ error: 'Cannot read SS config' });
+  res.json({ server: SERVER_IP, port: cfg.server_port, method: cfg.method, password: cfg.password, link: ssLink(cfg) });
+});
+
+// Shadowsocks: reset password
+app.post('/api/vpn/ss/reset', requireVpnToken, (req, res) => {
+  const cfg = ssGetConfig();
+  if (!cfg) return res.status(500).json({ error: 'Cannot read SS config' });
+  const newPass = require('crypto').randomBytes(16).toString('hex');
+  cfg.password = newPass;
+  fs.writeFileSync(SS_CONF, JSON.stringify(cfg, null, 2));
+  execSync('systemctl restart shadowsocks-libev');
+  res.json({ ok: true, password: newPass, link: ssLink(cfg) });
+});
+
+// WireGuard: server status
+app.get('/api/vpn/wg/status', requireVpnToken, (req, res) => {
+  try {
+    const out = execSync('wg show wg0').toString();
+    res.json({ running: true, raw: out });
+  } catch(_) { res.json({ running: false }); }
+});
+
+// ── Gateway API (tun2socks + policy routing) ─────────────────────────────────
+const GW_DIR = '/etc/openvpn/gateways';
+const GW_DATA = path.join(__dirname, 'gateways.json');
+
+// Country → DNS mapping: DoT upstreams (via proxy) + direct fallback (if dnsproxy down)
+const COUNTRY_DNS = {
+  CN: { u1: 'tls://223.5.5.5:853',     u2: 'tls://119.29.29.29:853', fallback: '223.5.5.5'  },  // AliDNS + DNSPod
+  HK: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  TW: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  JP: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  KR: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  SG: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  RU: { u1: 'tls://8.8.8.8:853',       u2: 'tls://8.8.4.4:853',      fallback: '8.8.8.8'    },  // 1.1.1.1 may be blocked
+  IR: { u1: 'tls://8.8.8.8:853',       u2: 'tls://8.8.4.4:853',      fallback: '8.8.8.8'    },
+  TR: { u1: 'tls://8.8.8.8:853',       u2: 'tls://1.1.1.1:853',      fallback: '8.8.8.8'    },
+  VN: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  TH: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  ID: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  MY: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  IN: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
+  US: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
+  GB: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
+  DE: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
+  FR: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
+  NL: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
+  _:  { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },  // default
+};
+
+// Quick country lookup via ipinfo.io (free, no auth, 50k/mo)
+async function getCountryCode(ip) {
+  try {
+    const { data } = await axios.get(`https://ipinfo.io/${encodeURIComponent(ip)}/country`, {
+      timeout: 5000,
+      headers: { 'User-Agent': 'proxy-checker/1.0', 'Accept': 'text/plain' },
+    });
+    return String(data).trim().toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2) || '';
+  } catch(_) { return ''; }
+}
+fs.mkdirSync(GW_DIR, { recursive: true });
+
+function gwLoad() {
+  try { return JSON.parse(fs.readFileSync(GW_DATA, 'utf8')); } catch(_) { return {}; }
+}
+function gwSave(data) { fs.writeFileSync(GW_DATA, JSON.stringify(data, null, 2)); }
+
+// Allocate unique resources per gateway
+function gwAllocResources(gateways) {
+  const usedTables  = new Set(Object.values(gateways).map(g => g.table_id));
+  const usedSubnets = new Set(Object.values(gateways).map(g => g.vpn_subnet_index));
+  const usedT2S     = new Set(Object.values(gateways).map(g => g.t2s_subnet_index));
+  let tableId = 100;
+  while (usedTables.has(tableId)) tableId++;
+  let vpnIdx = 0;
+  while (usedSubnets.has(vpnIdx)) vpnIdx++;
+  let t2sIdx = 0;
+  while (usedT2S.has(t2sIdx)) t2sIdx++;
+  return { tableId, vpnIdx, t2sIdx };
+}
+
+// Check if a UDP port is busy at OS level
+function isUdpPortBusy(port) {
+  try {
+    const out = execSync(`ss -lnuH 'sport = :${port}'`, { encoding:'utf8' });
+    return out.trim().length > 0;
+  } catch(_) { return false; }
+}
+
+// Pick first free UDP port starting from `start`, skipping ones used by other gateways or OS sockets
+function gwPickPort(gateways, start = 1195) {
+  const used = new Set(Object.values(gateways).map(g => g.vpn_port));
+  // Also avoid common OpenVPN/WG/SS ports
+  [1194, 51820, 8388].forEach(p => used.add(p));
+  let p = start;
+  while (p < 65535) {
+    if (!used.has(p) && !isUdpPortBusy(p)) return p;
+    p++;
+  }
+  throw new Error('No free UDP port available');
+}
+
+// Validate & test proxy (auto-detect SOCKS5/HTTP). Returns exit IP.
+async function gwTestProxy(proxyUrl) {
+  const r = await detectAndTestProxy(proxyUrl);
+  return r.exitIp;
+}
+
+// GET all gateways
+app.get('/api/gateways', requireVpnToken, (req, res) => {
+  const gateways = gwLoad();
+  const result = [];
+  for (const name in gateways) {
+    const gw = { ...gateways[name] };
+    try { execSync(`systemctl is-active openvpn-server@${gw.name}`); gw.vpn_running = true; } catch(_) { gw.vpn_running = false; }
+    try { execSync(`systemctl is-active tun2socks@${gw.name}`); gw.tun_running = true; } catch(_) { gw.tun_running = false; }
+    gw.running = gw.vpn_running && gw.tun_running;
+    // Redact password in proxy_url for display
+    try {
+      const u = new URL(gw.proxy_url);
+      if (u.password) u.password = '***';
+      gw.proxy_display = u.toString();
+    } catch(_) { gw.proxy_display = gw.proxy_url; }
+    delete gw.proxy_url_full;
+    result.push(gw);
+  }
+  res.json({ gateways: result });
+});
+
+// POST create gateway
+app.post('/api/gateways', requireVpnToken, async (req, res) => {
+  try {
+    const { name, proxy_url, vpn_port } = req.body;
+    if (!name || !proxy_url) return res.status(400).json({ error: 'Missing params' });
+    if (!/^[a-zA-Z0-9_-]{1,24}$/.test(name)) return res.status(400).json({ error: 'Invalid name' });
+
+    const gateways = gwLoad();
+    if (gateways[name]) return res.status(409).json({ error: 'Gateway exists' });
+
+    // Auto-pick port if not provided, otherwise validate the requested one
+    let port;
+    if (vpn_port) {
+      port = parseInt(vpn_port, 10);
+      if (!port || port < 1024 || port > 65535) return res.status(400).json({ error: 'Invalid port' });
+      for (const g of Object.values(gateways)) {
+        if (g.vpn_port === port) return res.status(409).json({ error: `Port ${port} already used by gateway ${g.name}` });
+      }
+      if (isUdpPortBusy(port)) return res.status(409).json({ error: `Port ${port} is already in use on the server` });
+    } else {
+      port = gwPickPort(gateways);
+    }
+
+    // 1. Auto-detect proxy type (SOCKS5 / HTTP) + live-test (combined step)
+    let detected;
+    try { detected = await detectAndTestProxy(proxy_url); }
+    catch(e) { return res.status(400).json({ error: 'Proxy test failed: ' + e.message }); }
+    const exitIp = detected.exitIp;
+    const normalizedProxy = detected.url;          // canonical URL stored in tun2socks.env
+    const proxyScheme = detected.scheme;           // 'socks5' or 'http'
+
+    // tun2socks only supports SOCKS5 / SS / HTTP CONNECT — both are fine.
+    // (HTTP CONNECT does NOT carry UDP, so DNS/UDP from VPN clients will be blocked by the LEAK chain.)
+    if (proxyScheme === 'http') {
+      console.warn(`[gw ${name}] HTTP proxy detected — UDP will not work, only TCP.`);
+    }
+
+    // 3. Allocate resources
+    const { tableId, vpnIdx, t2sIdx } = gwAllocResources(gateways);
+    const vpnSubnet  = `10.${100 + vpnIdx}.0.0/24`;
+    const vpnNetwork = `10.${100 + vpnIdx}.0.0`;
+    const vpnDnsIp   = `10.${100 + vpnIdx}.0.1`;   // OpenVPN server IP — clients' DNS will also be pushed through tunnel
+    const t2sDev     = `t2s-${name}`.slice(0, 15);  // IFNAMSIZ=16
+    const t2sIp      = `10.${200 + t2sIdx}.0.1`;
+    const gwPath     = path.join(GW_DIR, name);
+    fs.mkdirSync(gwPath, { recursive: true });
+
+    // 4. tun2socks env file
+    fs.writeFileSync(path.join(gwPath, 'tun2socks.env'),
+      `TUN_DEV=${t2sDev}\nTUN_IP=${t2sIp}\nPROXY_URL=${normalizedProxy}\n`);
+
+    // 4b. Create per-gateway dnsproxy OS user (isolated uid → isolated fwmark → isolated routing table)
+    const gwUser = `dnsproxy-${name}`;
+    try { execSync(`id ${gwUser}`, { stdio:'ignore' }); } catch(_) {
+      execSync(`useradd -r -M -s /bin/false ${gwUser}`);
+    }
+    const gwUid = parseInt(execSync(`id -u ${gwUser}`).toString().trim(), 10);
+    // fwmark = TABLE_ID (decimal) mapped to hex, unique per gateway
+    const fwmark = `0x${tableId.toString(16)}`;
+
+    // 5. routing env for up.sh/down.sh
+    fs.writeFileSync(path.join(gwPath, 'routing.env'),
+      `TABLE_ID=${tableId}\nTUN_DEV=${t2sDev}\nVPN_SUBNET=${vpnSubnet}\nDNSPROXY_UID=${gwUid}\nFWMARK=${fwmark}\n`);
+
+    // 5b. Detect country from exit IP → select per-country DNS servers
+    const dnsPort = 15300 + vpnIdx;
+    const countryCode = await getCountryCode(exitIp);
+    const dnsCfg = COUNTRY_DNS[countryCode] || COUNTRY_DNS['_'];
+
+    // dnsproxy env: upstreams chosen by proxy's country (routes through SOCKS)
+    // Keep explicit fallback upstreams so DNS does not stall when one resolver is flaky.
+    fs.writeFileSync(path.join(gwPath, 'dnsproxy.env'),
+      `DNS_PORT=${dnsPort}\nDNS_PORT_BOOTSTRAP=8.8.8.8:53\nDNS_UPSTREAM_1=${dnsCfg.u1}\nDNS_UPSTREAM_2=${dnsCfg.u2}\nDNS_FALLBACK_1=${dnsCfg.u1}\nDNS_FALLBACK_2=${dnsCfg.u2}\n`);
+
+    // dnsmasq-gw env: per-gateway resolver listening on the VPN gateway IP
+    const vpnGwIp = `10.${100 + vpnIdx}.0.1`;
+    fs.writeFileSync(path.join(gwPath, 'dnsmasq-gw.env'),
+      `VPN_GW_IP=${vpnGwIp}\nDNS_PORT=${dnsPort}\nDNS_FALLBACK=${dnsCfg.fallback}\n`);
+
+    // 6. OpenVPN server config (DNS pushed is the VPN server itself → dnsmasq or redirect via tun2socks)
+    //    To avoid DNS leak without running local resolver, we push public DNS but force all egress through tun2socks TUN,
+    //    and block all FORWARD from VPN subnet except → tun2socks TUN (see up.sh).
+    const ovpnConf = `# Auto-generated for gateway: ${name}
+port ${port}
+proto udp
+dev tun
+ca   ${gwPath}/ca.crt
+cert ${gwPath}/server.crt
+key  ${gwPath}/server.key
+dh   ${gwPath}/dh.pem
+tls-auth ${gwPath}/ta.key 0
+topology subnet
+server ${vpnNetwork} 255.255.255.0
+ifconfig-pool-persist ${gwPath}/ipp.txt
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS 10.${100 + vpnIdx}.0.1"
+push "block-outside-dns"
+keepalive 10 60
+cipher AES-256-GCM
+auth SHA256
+compress lz4-v2
+push "compress lz4-v2"
+max-clients 50
+persist-key
+persist-tun
+status ${gwPath}/status.log
+log-append ${gwPath}/openvpn.log
+verb 3
+script-security 2
+up   "/etc/openvpn/gateways/up.sh ${name}"
+down "/etc/openvpn/gateways/down.sh ${name}"
+`;
+    fs.writeFileSync(path.join(gwPath, `${name}.conf`), ovpnConf);
+
+    // 7. Copy PKI material
+    for (const f of ['ca.crt','server.crt','server.key','dh.pem','ta.key']) {
+      fs.copyFileSync(path.join('/etc/openvpn/server', f), path.join(gwPath, f));
+    }
+
+    // 8. Save state
+    gateways[name] = {
+      name, proxy_url: normalizedProxy, proxy_scheme: proxyScheme,
+      vpn_port: port, exit_ip: exitIp,
+      country: countryCode, dns_upstream1: dnsCfg.u1, dns_fallback: dnsCfg.fallback,
+      table_id: tableId, vpn_subnet_index: vpnIdx, t2s_subnet_index: t2sIdx,
+      vpn_subnet: vpnSubnet, t2s_dev: t2sDev,
+      gw_user: gwUser, gw_uid: gwUid, fwmark,
+      client_count: 0, created_at: new Date().toISOString(),
+    };
+    gwSave(gateways);
+
+    // 9. Enable + start both services (tun2socks FIRST, then openvpn)
+    execSync(`systemctl daemon-reload`);
+    execSync(`systemctl enable --now tun2socks@${name}`);
+    // dnsproxy: best-effort start (only if dnsproxy binary + user exist)
+    try { execSync(`id dnsproxy && test -x /usr/local/bin/dnsproxy && systemctl enable --now dnsproxy@${name}`, { shell:'/bin/bash' }); } catch(e) { console.warn('[gw dnsproxy]', e.message); }
+    // dnsmasq-gw: per-gateway DNS resolver (listens on VPN gateway IP via bind-dynamic)
+    try { execSync(`systemctl enable --now dnsmasq-gw@${name}`); } catch(e) { console.warn('[gw dnsmasq-gw]', e.message); }
+    // Symlink openvpn server conf so systemd finds it
+    const ovSymlink = `/etc/openvpn/server/${name}.conf`;
+    if (!fs.existsSync(ovSymlink)) fs.symlinkSync(path.join(gwPath, `${name}.conf`), ovSymlink);
+    execSync(`systemctl enable --now openvpn-server@${name}`);
+
+    // 10. Open firewall UDP port (idempotent)
+    try {
+      execSync(`iptables -C INPUT -p udp --dport ${port} -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport ${port} -j ACCEPT`, { shell:'/bin/bash' });
+      execSync(`iptables-save > /etc/iptables/rules.v4 2>/dev/null || true`, { shell:'/bin/bash' });
+    } catch(e) { console.warn('[gw firewall]', e.message); }
+
+    res.status(201).json({ ok: true, name, vpn_port: port, exit_ip: exitIp });
+  } catch(e) {
+    console.error('[gw create]', e);
+    res.status(500).json({ error: e.message || 'Internal error' });
+  }
+});
+
+// DELETE gateway (full cleanup)
+app.delete('/api/gateways/:name', requireVpnToken, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const gateways = gwLoad();
+  if (!gateways[name]) return res.status(404).json({ error: 'Not found' });
+  try { execSync(`systemctl disable --now openvpn-server@${name}`); } catch(_){}
+  try { execSync(`systemctl disable --now tun2socks@${name}`); } catch(_){}
+  try { execSync(`systemctl disable --now dnsproxy@${name}`); } catch(_){}
+  try { execSync(`systemctl disable --now dnsmasq-gw@${name}`); } catch(_){}
+  // Remove per-gateway dnsproxy user
+  try { execSync(`userdel dnsproxy-${name} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
+  try { fs.unlinkSync(`/etc/openvpn/server/${name}.conf`); } catch(_){}
+  try { fs.rmSync(path.join(GW_DIR, name), { recursive: true, force: true }); } catch(_){}
+  delete gateways[name];
+  gwSave(gateways);
+  res.json({ ok: true });
+});
+
+// start/stop/restart (restricted via regex so /client and /test don't match here)
+app.post('/api/gateways/:name/:action(start|stop|restart)', requireVpnToken, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const action = req.params.action;
+  if (!['start','stop','restart'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  try {
+    if (action === 'stop') {
+      execSync(`systemctl stop openvpn-server@${name}`);
+      execSync(`systemctl stop tun2socks@${name}`);
+    } else {
+      execSync(`systemctl ${action} tun2socks@${name}`);
+      execSync(`systemctl ${action} openvpn-server@${name}`);
+    }
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: `Failed: ${e.message}` }); }
+});
+
+// Create client .ovpn for a specific gateway
+app.post('/api/gateways/:name/client', requireVpnToken, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const clientName = (req.body.client_name || '').replace(/[^a-zA-Z0-9_-]/g,'').slice(0, 32);
+  if (!clientName) return res.status(400).json({ error: 'Invalid client name' });
+  const gateways = gwLoad();
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Gateway not found' });
+
+  const certName = `${name}_${clientName}`;
+  try {
+    // Generate client cert
+    execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-req ${certName} nopass 2>&1`, { shell:'/bin/bash' });
+    execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa sign-req client ${certName} 2>&1`, { shell:'/bin/bash' });
+
+    const ca   = fs.readFileSync('/etc/openvpn/easy-rsa/pki/ca.crt', 'utf8').trim();
+    const cert = fs.readFileSync(`/etc/openvpn/easy-rsa/pki/issued/${certName}.crt`, 'utf8');
+    const key  = fs.readFileSync(`/etc/openvpn/easy-rsa/pki/private/${certName}.key`, 'utf8').trim();
+    const ta   = fs.readFileSync('/etc/openvpn/server/ta.key', 'utf8').trim();
+    const certMatch = cert.match(/-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----/);
+    const certClean = certMatch ? certMatch[0].trim() : cert.trim();
+
+    const ovpn = `client
+dev tun
+proto udp
+remote ${SERVER_IP} ${gw.vpn_port}
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-GCM
+auth SHA256
+compress lz4-v2
+verb 3
+key-direction 1
+<ca>
+${ca}
+</ca>
+<cert>
+${certClean}
+</cert>
+<key>
+${key}
+</key>
+<tls-auth>
+${ta}
+</tls-auth>
+`;
+    gateways[name].client_count = (gw.client_count || 0) + 1;
+    gwSave(gateways);
+    res.json({ ok: true, name: clientName, ovpn });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Re-test gateway's proxy and return current exit IP
+app.post('/api/gateways/:name/test', requireVpnToken, async (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const gateways = gwLoad();
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Not found' });
+  try {
+    const ip = await gwTestProxy(gw.proxy_url);
+    gateways[name].exit_ip = ip;
+    gateways[name].last_tested = new Date().toISOString();
+    gwSave(gateways);
+    res.json({ ok: true, exit_ip: ip });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
+
+// ── OpenVPN API ────────────────────────────────────────────────────────────────
+const OV_DIR     = '/etc/openvpn';
+const OV_PKI     = '/etc/openvpn/easy-rsa/pki';
+const OV_DATA    = path.join(__dirname, 'ovpn-clients.json');
+
+function ovLoadClients() {
+  try { return JSON.parse(fs.readFileSync(OV_DATA, 'utf8')); } catch(_) { return {}; }
+}
+function ovSaveClients(data) { fs.writeFileSync(OV_DATA, JSON.stringify(data, null, 2)); }
+
+function ovCreateClient(name) {
+  const easyrsa = '/etc/openvpn/easy-rsa/easyrsa';
+  // Gen client key + cert (nopass, batch)
+  execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-req ${name} nopass 2>&1`, { shell: '/bin/bash' });
+  execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa sign-req client ${name} 2>&1`, { shell: '/bin/bash' });
+
+  const ca      = fs.readFileSync(`${OV_PKI}/ca.crt`, 'utf8').trim();
+  const cert    = fs.readFileSync(`${OV_PKI}/issued/${name}.crt`, 'utf8');
+  const key     = fs.readFileSync(`${OV_PKI}/private/${name}.key`, 'utf8').trim();
+  const ta      = fs.readFileSync('/etc/openvpn/server/ta.key', 'utf8').trim();
+
+  // Extract cert block only
+  const certMatch = cert.match(/-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----/);
+  const certClean = certMatch ? certMatch[0].trim() : cert.trim();
+
+  const ovpn = `client
+dev tun
+proto udp
+remote ${SERVER_IP} 1194
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-GCM
+auth SHA256
+compress lz4-v2
+verb 3
+key-direction 1
+<ca>
+${ca}
+</ca>
+<cert>
+${certClean}
+</cert>
+<key>
+${key}
+</key>
+<tls-auth>
+${ta}
+</tls-auth>
+`;
+
+  const clients = ovLoadClients();
+  clients[name] = { name, createdAt: new Date().toISOString() };
+  ovSaveClients(clients);
+  return ovpn;
+}
+
+function ovRevokeClient(name) {
+  try {
+    execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa revoke ${name} 2>&1`, { shell: '/bin/bash' });
+    execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-crl 2>&1`, { shell: '/bin/bash' });
+    execSync(`cp /etc/openvpn/easy-rsa/pki/crl.pem /etc/openvpn/server/crl.pem`);
+  } catch(_){}
+  const clients = ovLoadClients();
+  delete clients[name];
+  ovSaveClients(clients);
+}
+
+// OpenVPN: server status
+app.get('/api/vpn/ov/status', requireVpnToken, (req, res) => {
+  try {
+    execSync('systemctl is-active openvpn-server@server');
+    res.json({ running: true });
+  } catch(_) { res.json({ running: false }); }
+});
+
+// OpenVPN: list clients
+app.get('/api/vpn/ov/clients', requireVpnToken, (req, res) => {
+  const clients = ovLoadClients();
+  res.json({ count: Object.keys(clients).length, clients: Object.values(clients) });
+});
+
+// OpenVPN: create client
+app.post('/api/vpn/ov/client', requireVpnToken, (req, res) => {
+  const name = (req.body.name || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+  if (!name) return res.status(400).json({ error: 'Invalid name' });
+  const clients = ovLoadClients();
+  if (clients[name]) return res.status(409).json({ error: 'Client already exists' });
+  try {
+    const ovpn = ovCreateClient(name);
+    res.json({ name, ovpn });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// OpenVPN: download .ovpn
+app.get('/api/vpn/ov/client/:name/ovpn', requireVpnToken, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
+  const clients = ovLoadClients();
+  if (!clients[name]) return res.status(404).end();
+  try {
+    const ca      = fs.readFileSync(`${OV_PKI}/ca.crt`, 'utf8').trim();
+    const cert    = fs.readFileSync(`${OV_PKI}/issued/${name}.crt`, 'utf8');
+    const key     = fs.readFileSync(`${OV_PKI}/private/${name}.key`, 'utf8').trim();
+    const ta      = fs.readFileSync('/etc/openvpn/server/ta.key', 'utf8').trim();
+    const certMatch = cert.match(/-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----/);
+    const certClean = certMatch ? certMatch[0].trim() : cert.trim();
+    const ovpn = `client\ndev tun\nproto udp\nremote ${SERVER_IP} 1194\nresolv-retry infinite\nnobind\npersist-key\npersist-tun\nremote-cert-tls server\ncipher AES-256-GCM\nauth SHA256\ncompress lz4-v2\nverb 3\nkey-direction 1\n<ca>\n${ca}\n</ca>\n<cert>\n${certClean}\n</cert>\n<key>\n${key}\n</key>\n<tls-auth>\n${ta}\n</tls-auth>\n`;
+    res.setHeader('Content-Type', 'application/x-openvpn-profile');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}.ovpn"`);
+    res.send(ovpn);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// OpenVPN: delete/revoke client
+app.delete('/api/vpn/ov/client/:name', requireVpnToken, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
+  const clients = ovLoadClients();
+  if (!clients[name]) return res.status(404).json({ error: 'Not found' });
+  ovRevokeClient(name);
+  res.json({ ok: true });
+});
+
+
+// GET all
+app.get('/api/library', (req, res) => {
+  const lib = libLoad();
+  const items = Object.values(lib).sort((a,b) => (b.saved_at||'').localeCompare(a.saved_at||''));
+  res.json({ count: items.length, items });
+});
+
+// DELETE one
+app.delete('/api/library/:proxy', (req, res) => {
+  const lib = libLoad();
+  const key = decodeURIComponent(req.params.proxy);
+  if (lib[key]) { delete lib[key]; libSave(lib); }
+  res.json({ ok: true, count: Object.keys(lib).length });
+});
+
+// DELETE all
+app.delete('/api/library', (req, res) => {
+  libSave({});
+  res.json({ ok: true });
+});
+
+// GET export (plain text list)
+app.get('/api/library/export', (req, res) => {
+  const lib = libLoad();
+  const lines = Object.keys(lib).join('\n');
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Content-Disposition', 'attachment; filename="proxy-library.txt"');
+  res.send(lines);
+});
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 app.post('/api/check', (req, res) => {
