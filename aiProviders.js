@@ -76,6 +76,7 @@ async function chat(opts) {
       // GPT-5 / o1 / o3 / o4 reasoning families on OpenAI:
       //   - reject `max_tokens`     → must use `max_completion_tokens`
       //   - reject custom `temperature` (only default=1 supported)
+      //   - tiêu hao token cho reasoning nội bộ trước khi sinh text → cần budget lớn hơn
       const m = (c.model || '').toLowerCase();
       const isReasoning = c.provider === 'openai' && /^(gpt-5|o1|o3|o4)/.test(m);
       const body = {
@@ -86,7 +87,9 @@ async function chat(opts) {
         ],
       };
       if (isReasoning) {
-        body.max_completion_tokens = maxTokens;
+        // reasoning model — đảm bảo có đủ ngân sách cho reasoning + visible output.
+        // OpenAI khuyến nghị tối thiểu vài nghìn token; ta đặt sàn 16k để tránh trả rỗng.
+        body.max_completion_tokens = Math.max(maxTokens, 16384);
       } else {
         body.max_tokens  = maxTokens;
         body.temperature = temperature;
@@ -96,8 +99,22 @@ async function chat(opts) {
       }, c.timeoutMs);
       const j = await r.json().catch(() => ({}));
       if (!r.ok) return { error: j.error?.message || j.error || ('HTTP ' + r.status), raw: j };
-      const text = j.choices?.[0]?.message?.content;
-      if (!text) return { error: 'AI trả về rỗng', raw: j };
+      const choice = j.choices?.[0] || {};
+      const text   = choice.message?.content;
+      if (!text) {
+        const finish = choice.finish_reason || 'unknown';
+        const used   = j.usage?.completion_tokens || 0;
+        const reasoning = j.usage?.completion_tokens_details?.reasoning_tokens || 0;
+        let hint = '';
+        if (finish === 'length') {
+          hint = isReasoning
+            ? ` Reasoning model "${c.model}" đã tiêu hết ngân sách token cho reasoning (${reasoning}/${used}) trước khi sinh text. Tăng "Max tokens" trong request hoặc giảm độ dài system prompt / scope.`
+            : ` Vượt giới hạn max_tokens (${used}). Tăng max_tokens hoặc giảm scope.`;
+        } else if (finish === 'content_filter') {
+          hint = ' Bị filter nội dung của OpenAI.';
+        }
+        return { error: `AI trả về rỗng (finish_reason=${finish}).${hint}`, raw: j };
+      }
       return { ok: true, text, model: c.model, provider: c.provider, usage: j.usage };
     }
 
