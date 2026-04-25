@@ -1015,6 +1015,12 @@ app.post('/api/gateways/:name/mitm/:action(start|stop|status)', requireVpnToken,
       execSync(`systemctl enable --now mitmproxy@${name}`);
       // Add PREROUTING REDIRECT (idempotent)
       execSync(`iptables -t nat -C PREROUTING ${redirectRuleArgs} 2>/dev/null || iptables -t nat -I PREROUTING 1 ${redirectRuleArgs}`, { shell:'/bin/bash' });
+      // Block QUIC (UDP/443) + UDP/80 → force browser fallback to TCP so mitm có thể bắt
+      for (const dport of [443, 80]) {
+        const rule = `-s ${gw.vpn_subnet} -p udp --dport ${dport} -j REJECT --reject-with icmp-port-unreachable`;
+        try { execSync(`iptables -C FORWARD ${rule} 2>/dev/null || iptables -I FORWARD 1 ${rule}`, { shell:'/bin/bash' }); } catch(_){}
+      }
+      try { execSync(`iptables-save > /etc/iptables/rules.v4 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
       // Persist marker so up.sh can restore the rule after an openvpn restart
       fs.writeFileSync(markerFile, '1\n');
       gw.mitm_enabled = true;
@@ -1024,6 +1030,11 @@ app.post('/api/gateways/:name/mitm/:action(start|stop|status)', requireVpnToken,
     if (action === 'stop') {
       // Remove redirect first so clients fail-open back to direct (no MITM hijack)
       try { execSync(`iptables -t nat -D PREROUTING ${redirectRuleArgs} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
+      // Remove QUIC block
+      for (const dport of [443, 80]) {
+        const rule = `-s ${gw.vpn_subnet} -p udp --dport ${dport} -j REJECT --reject-with icmp-port-unreachable`;
+        try { execSync(`iptables -D FORWARD ${rule} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
+      }
       try { execSync(`systemctl disable --now mitmproxy@${name}`, { stdio:'ignore' }); } catch(_){}
       try { fs.unlinkSync(markerFile); } catch(_){}
       gw.mitm_enabled = false;
