@@ -351,6 +351,8 @@ function attach(app, server, requireVpnToken) {
         user:     body.user,
         temperature: body.temperature,
         maxTokens:   body.maxTokens,
+        autoModel:    body.autoModel,
+        wantReasoning: body.wantReasoning,
       });
       res.json({
         report_summary: {
@@ -364,6 +366,85 @@ function attach(app, server, requireVpnToken) {
         ai,
       });
     } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // AI summary STREAM — Server-Sent Events. Body = giống /analyze/ai.
+  // Client subscribe events: meta, auto_select, thinking, text, usage, note, done, error.
+  app.post('/api/public/g/:name/analyze/ai/stream', async (req, res) => {
+    if (!analyzer) { res.status(500).json({ error:'analyzer not loaded' }); return; }
+    const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!name) { res.status(400).json({ error:'bad name' }); return; }
+
+    res.set({
+      'Content-Type':'text/event-stream',
+      'Cache-Control':'no-cache, no-transform',
+      'Connection':'keep-alive',
+      'X-Accel-Buffering':'no',
+    });
+    res.flushHeaders?.();
+    const send = (ev) => {
+      try { res.write(`data: ${JSON.stringify(ev)}\n\n`); } catch(_) {}
+    };
+    // keepalive comment ping
+    const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch(_){} }, 15_000);
+    req.on('close', () => clearInterval(ping));
+
+    try {
+      const body = req.body || {};
+      const report = analyzer.analyzeGateway(name, buildScopeOpts(body));
+      send({ type:'report_summary', report_summary: {
+        risk_score: report.risk_score,
+        risk_reasons: report.risk_reasons,
+        flows_analyzed: report.window.flows_analyzed,
+        unique_apps: report.summary.unique_apps,
+        unique_domains: report.summary.unique_domains,
+        filters: report.filters,
+      }});
+      await analyzer.aiSummarizeStream(report, {
+        provider: body.provider, apiKey: body.apiKey, baseURL: body.baseURL,
+        model: body.model, system: body.system, user: body.user,
+        temperature: body.temperature, maxTokens: body.maxTokens,
+        showThinking: body.showThinking, autoModel: body.autoModel,
+        wantReasoning: body.wantReasoning,
+      }, send);
+    } catch (e) {
+      send({ type:'error', error: e.message });
+    } finally {
+      clearInterval(ping);
+      try { res.end(); } catch(_) {}
+    }
+  });
+
+  // Auto-suggest model + estimate token without calling AI (cheap probe)
+  app.post('/api/public/g/:name/analyze/auto-suggest', (req, res) => {
+    if (!analyzer) return res.status(500).json({ error:'analyzer not loaded' });
+    const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
+    try {
+      const body = req.body || {};
+      const report = analyzer.analyzeGateway(name, buildScopeOpts(body));
+      // Build the same compact-report user message preview to estimate tokens.
+      const fakeUser = JSON.stringify({
+        gateway: report.gateway,
+        summary: report.summary,
+        apps: report.apps.slice(0,15),
+        domains: report.domains.slice(0,25),
+        trackers: report.trackers.slice(0,25),
+        fp_headers: report.fp_headers.slice(0,30),
+        fp_body_fields: report.fp_body_fields.slice(0,25),
+      });
+      const sel = analyzer.autoSelectModel({
+        provider: body.provider || 'openai',
+        system:   body.system || '',
+        user:     fakeUser,
+        wantReasoning: !!body.wantReasoning,
+      });
+      res.json({
+        ok: true,
+        suggestion: sel,
+        flows: report.summary.total_flows,
+        estimated_input_tokens: analyzer.estimateTokens(fakeUser),
+      });
+    } catch(e) { res.status(500).json({ error: e.message }); }
   });
 
   // Stats per gateway (last 1h)

@@ -632,13 +632,14 @@ async function aiSummarize(report, aiOpts = {}) {
   const provider = (aiOpts.provider || process.env.LLM_PROVIDER || 'openai').toLowerCase();
   const apiKey   = aiOpts.apiKey   || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY || '';
   const baseURL  = aiOpts.baseURL  || process.env.LLM_BASE_URL || '';
-  const model    = aiOpts.model    || process.env.LLM_MODEL    || '';
+  let   model    = aiOpts.model    || process.env.LLM_MODEL    || '';
   const system   = aiOpts.system   || DEFAULT_SYSTEM_PROMPT;
   const userPref = aiOpts.user     || '';
   const temperature = aiOpts.temperature;
-  const maxTokens   = aiOpts.maxTokens || 3072;
+  const maxTokens   = aiOpts.maxTokens || 4096;
+  const autoModel   = !!aiOpts.autoModel;
+  const wantReasoning = !!aiOpts.wantReasoning;
 
-  // Local providers don't need a key; remote do
   const localProvider = provider === 'ollama' || provider === 'lmstudio';
   if (!apiKey && !localProvider) {
     return { error: 'Chưa có API key. Cấu hình LLM_API_KEY trên server hoặc nhập API key của bạn ở mục Cài đặt AI (BYOK), hoặc chọn provider offline (Ollama / LM Studio).' };
@@ -656,10 +657,60 @@ async function aiSummarize(report, aiOpts = {}) {
     JSON.stringify(compact, null, 2) +
     '\n\`\`\`\n\nHãy phân tích chi tiết theo cấu trúc đã chỉ định.';
 
-  return await aiProviders.chat({
+  // Auto-select model nếu user yêu cầu (hoặc không nhập model thủ công)
+  let autoInfo = null;
+  if (autoModel || !model) {
+    const sel = aiProviders.autoSelectModel({ provider, system, user: userMsg, wantReasoning });
+    if (sel.model) { model = sel.model; autoInfo = sel; }
+  }
+
+  const r = await aiProviders.chat({
     provider, apiKey, baseURL, model,
     system, user: userMsg, temperature, maxTokens,
   });
+  if (autoInfo) r.auto_select = autoInfo;
+  return r;
+}
+
+// Streaming version — `onEvent(ev)` được gọi liên tục với các sự kiện meta/text/thinking/usage/done/error.
+async function aiSummarizeStream(report, aiOpts = {}, onEvent = ()=>{}) {
+  const provider = (aiOpts.provider || process.env.LLM_PROVIDER || 'openai').toLowerCase();
+  const apiKey   = aiOpts.apiKey   || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || '';
+  const baseURL  = aiOpts.baseURL  || process.env.LLM_BASE_URL || '';
+  let   model    = aiOpts.model    || process.env.LLM_MODEL    || '';
+  const system   = aiOpts.system   || DEFAULT_SYSTEM_PROMPT;
+  const userPref = aiOpts.user     || '';
+  const temperature = aiOpts.temperature;
+  const maxTokens   = aiOpts.maxTokens || 4096;
+  const showThinking = !!aiOpts.showThinking;
+  const autoModel    = !!aiOpts.autoModel;
+  const wantReasoning = showThinking || !!aiOpts.wantReasoning;
+
+  const localProvider = provider === 'ollama' || provider === 'lmstudio';
+  if (!apiKey && !localProvider) {
+    onEvent({ type:'error', error:'Chưa có API key. Mở Cài đặt AI để nhập, hoặc chọn Ollama/LM Studio.' });
+    return;
+  }
+
+  const compact = buildCompactReport(report);
+  const filterDesc = [];
+  if (report.filters.domain)  filterDesc.push('domain=' + report.filters.domain);
+  if (report.filters.keyword) filterDesc.push('keyword=' + report.filters.keyword);
+  if (report.filters.app)     filterDesc.push('app=' + report.filters.app);
+  const scopeDesc = filterDesc.length ? '(scope: ' + filterDesc.join(', ') + ')' : '(scope: tất cả)';
+  const userMsg = (userPref ? userPref + '\n\n' : '') +
+    `Đây là report rule-based ${scopeDesc}:\n\`\`\`json\n` + JSON.stringify(compact, null, 2) +
+    '\n\`\`\`\n\nHãy phân tích chi tiết theo cấu trúc đã chỉ định.';
+
+  if (autoModel || !model) {
+    const sel = aiProviders.autoSelectModel({ provider, system, user: userMsg, wantReasoning });
+    if (sel.model) { model = sel.model; onEvent({ type:'auto_select', ...sel }); }
+  }
+
+  await aiProviders.chatStream({
+    provider, apiKey, baseURL, model,
+    system, user: userMsg, temperature, maxTokens, showThinking,
+  }, onEvent);
 }
 
 async function listAIModels(aiOpts = {}) {
@@ -677,4 +728,11 @@ function listProviders() {
   }));
 }
 
-module.exports = { analyzeGateway, aiSummarize, listAIModels, listProviders, identifyApp, rootDomain };
+module.exports = {
+  analyzeGateway, aiSummarize, aiSummarizeStream,
+  listAIModels, listProviders,
+  identifyApp, rootDomain,
+  autoSelectModel: aiProviders.autoSelectModel,
+  estimateTokens:  aiProviders.estimateTokens,
+  MODEL_TIERS:     aiProviders.MODEL_TIERS,
+};

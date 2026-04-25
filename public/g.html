@@ -285,7 +285,10 @@ sudo openvpn --config &lt;file&gt;.ovpn</pre>
         <input id="an-keyword" placeholder="Từ khoá (url/path/body)" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:6px; min-width:180px">
         <input id="an-app"     placeholder="App (vd: eBay, TikTok)" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:6px; min-width:140px">
         <button class="btn" onclick="runAnalyze()">🔍 Quét rule-based</button>
-        <button class="btn purple" id="btn-ai" onclick="runAI()">✨ Phân tích AI</button>
+        <button class="btn purple" id="btn-ai" onclick="runAI()">✨ Phân tích AI (stream)</button>
+        <button class="ghost" id="btn-suggest" onclick="suggestModel()" style="padding:8px 12px">💡 Gợi ý model</button>
+        <label style="color:var(--dim); font-size:12px; display:flex; align-items:center; gap:4px"><input type="checkbox" id="ai-auto" checked> Auto-chọn model</label>
+        <label style="color:var(--dim); font-size:12px; display:flex; align-items:center; gap:4px"><input type="checkbox" id="ai-thinking"> Hiện suy nghĩ</label>
         <span id="ai-status" style="color:var(--dim); font-size:12px"></span>
       </div>
     </div>
@@ -1005,39 +1008,133 @@ function renderReport(rep) {
   document.getElementById('an-geo-card').style.display = 'block';
 }
 
+async function suggestModel() {
+  const status = document.getElementById('ai-status');
+  const opts = getAIOpts();
+  status.textContent = 'đang ước lượng...';
+  try {
+    const body = Object.assign(getScopeBody(), {
+      provider: opts.provider, system: opts.system,
+      wantReasoning: document.getElementById('ai-thinking').checked,
+    });
+    const r = await fetch(`/api/public/g/${NAME}/analyze/auto-suggest`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'fail');
+    const s = j.suggestion;
+    status.innerHTML = `💡 Gợi ý: <b style="color:var(--green)">${escapeHtml(s.model)}</b> (tier ${s.tier}) · ~${j.estimated_input_tokens.toLocaleString()} input tokens · ${j.flows} flows`;
+    document.getElementById('ai-model').value = s.model;
+  } catch(e) {
+    status.innerHTML = '<span style="color:var(--red)">lỗi: ' + escapeHtml(e.message) + '</span>';
+  }
+}
+
 async function runAI() {
   const status = document.getElementById('ai-status');
   const opts = getAIOpts();
-  if (!opts.model) {
-    status.textContent = '⚠ chưa chọn model — vào ⚙️ Cài đặt AI gõ tên model hoặc Refresh + chọn từ dropdown';
+  const auto = document.getElementById('ai-auto').checked;
+  const showThinking = document.getElementById('ai-thinking').checked;
+  if (!opts.model && !auto) {
+    status.textContent = '⚠ chưa chọn model — bật "Auto-chọn model" hoặc vào ⚙️ Cài đặt AI';
     return;
   }
-  status.textContent = `AI đang chạy với ${opts.provider} / ${opts.model}... (5-60s)`;
   document.getElementById('btn-ai').disabled = true;
+  // Reset output panes
+  const aiCard = document.getElementById('an-ai-card');
+  const aiBox  = document.getElementById('an-ai');
+  aiCard.style.display = 'block';
+  aiBox.innerHTML = `
+    <div id="ai-meta" style="color:var(--dim); font-size:11px; margin-bottom:8px">đang kết nối...</div>
+    <details id="ai-thinking-wrap" style="display:none; margin-bottom:8px" open>
+      <summary style="cursor:pointer; color:var(--dim); font-size:12px">🧠 Suồng suy nghĩ (live)</summary>
+      <div id="ai-thinking-out" style="background:#1a1a2e; border:1px dashed var(--border); padding:10px; border-radius:6px; white-space:pre-wrap; font-family:ui-monospace,monospace; font-size:11px; color:#9aa; max-height:300px; overflow:auto; margin-top:6px"></div>
+    </details>
+    <div id="ai-text-out" style="background:var(--surface2); padding:14px; border-radius:6px; white-space:pre-wrap; line-height:1.6; min-height:40px"><span style="color:var(--dim)">đợi token đầu tiên...</span></div>
+  `;
+  const metaEl = document.getElementById('ai-meta');
+  const thinkWrap = document.getElementById('ai-thinking-wrap');
+  const thinkOut  = document.getElementById('ai-thinking-out');
+  const textOut   = document.getElementById('ai-text-out');
+  let textBuf = '', thinkBuf = '';
+  let firstText = true;
+  let model = opts.model || '(auto)';
+
+  status.textContent = `🔄 đang stream từ ${opts.provider}...`;
+
   try {
-    const body = Object.assign(getScopeBody(), opts);
-    const r = await fetch(`/api/public/g/${NAME}/analyze/ai`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body),
+    const body = Object.assign(getScopeBody(), opts, {
+      autoModel: auto, wantReasoning: showThinking, showThinking,
+      maxTokens: opts.maxTokens || (showThinking ? 8192 : 4096),
     });
-    const j = await r.json();
-    if (j.ai && j.ai.error) throw new Error(j.ai.error);
-    if (!j.ai || !j.ai.text) throw new Error('AI trả về rỗng');
-    const rs = j.report_summary || {};
-    document.getElementById('an-ai').innerHTML = `
-      <div style="color:var(--dim); font-size:11px; margin-bottom:8px">
-        Provider: <b>${escapeHtml(j.ai.provider||'')}</b> · Model thực dùng: <b style="color:var(--green)">${escapeHtml(j.ai.model||'')}</b>
-        · Risk rule-based: ${rs.risk_score||0}/100
-        · Flows: ${rs.flows_analyzed||0} · Apps: ${rs.unique_apps||0} · Domains: ${rs.unique_domains||0}
-      </div>
-      <div style="background:var(--surface2); padding:14px; border-radius:6px; white-space:pre-wrap; line-height:1.6">${escapeHtml(j.ai.text)}</div>
-    `;
-    document.getElementById('an-ai-card').style.display = 'block';
-    status.textContent = `✓ AI xong (${j.ai.model})`;
+    const r = await fetch(`/api/public/g/${NAME}/analyze/ai/stream`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body),
+    });
+    if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream:true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const chunk = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        for (const line of chunk.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          let ev; try { ev = JSON.parse(line.slice(6)); } catch(_) { continue; }
+          handleStreamEvent(ev);
+        }
+      }
+    }
+    status.textContent = `✓ AI xong (${model})`;
   } catch(e) {
-    status.innerHTML = '<span style="color:var(--red)">AI lỗi (' + escapeHtml(opts.model) + '): ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span style="color:var(--red)">stream lỗi: ' + escapeHtml(e.message) + '</span>';
   } finally {
     document.getElementById('btn-ai').disabled = false;
+  }
+
+  function handleStreamEvent(ev) {
+    switch (ev.type) {
+      case 'meta':
+        model = ev.model;
+        metaEl.innerHTML = `Provider: <b>${escapeHtml(ev.provider)}</b> · Model: <b style="color:var(--green)">${escapeHtml(ev.model)}</b>`;
+        break;
+      case 'auto_select':
+        metaEl.innerHTML += ` · 💡 auto-chọn: ${escapeHtml(ev.reason)}`;
+        break;
+      case 'report_summary':
+        const rs = ev.report_summary;
+        metaEl.innerHTML += ` · Risk: ${rs.risk_score||0}/100 · Flows: ${rs.flows_analyzed} · Apps: ${rs.unique_apps} · Domains: ${rs.unique_domains}`;
+        break;
+      case 'thinking':
+        thinkWrap.style.display = 'block';
+        thinkBuf += ev.delta;
+        thinkOut.textContent = thinkBuf;
+        thinkOut.scrollTop = thinkOut.scrollHeight;
+        break;
+      case 'text':
+        if (firstText) { textOut.textContent = ''; firstText = false; }
+        textBuf += ev.delta;
+        textOut.textContent = textBuf;
+        break;
+      case 'note':
+        metaEl.innerHTML += `<br><span style="color:var(--orange)">ℹ ${escapeHtml(ev.text)}</span>`;
+        break;
+      case 'usage':
+        const u = ev.usage || {};
+        const inT  = u.prompt_tokens || u.input_tokens || 0;
+        const outT = u.completion_tokens || u.output_tokens || 0;
+        metaEl.innerHTML += ` · tokens: in=${inT} out=${outT}`;
+        break;
+      case 'error':
+        textOut.innerHTML = '<span style="color:var(--red)">lỗi: ' + escapeHtml(ev.error) + '</span>';
+        break;
+      case 'done':
+        break;
+    }
   }
 }
 </script>
