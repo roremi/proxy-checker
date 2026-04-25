@@ -762,35 +762,49 @@ function onProviderChange() {
   const id = document.getElementById('ai-provider').value;
   const p = AI_PROVIDERS.find(x => x.id === id);
   if (!p) return;
-  // Auto-fill baseURL + model placeholder for the provider
-  document.getElementById('ai-baseurl').placeholder = p.baseURL || 'https://...';
-  document.getElementById('ai-model').placeholder = p.defaultModel || '';
-  if (!document.getElementById('ai-baseurl').value && (id === 'openai-compat' || id === 'lmstudio' || id === 'ollama')) {
-    if (id === 'ollama')   document.getElementById('ai-baseurl').value = 'http://127.0.0.1:11434';
-    if (id === 'lmstudio') document.getElementById('ai-baseurl').value = 'http://127.0.0.1:1234/v1';
-  }
-  if (!document.getElementById('ai-model').value && p.defaultModel) {
-    document.getElementById('ai-model').value = p.defaultModel;
-  }
+  const baseEl  = document.getElementById('ai-baseurl');
+  const modelEl = document.getElementById('ai-model');
+  // Reset baseURL/model khi đổi provider (tránh dùng nhầm URL của provider trước, vd 127.0.0.1:11434 của Ollama).
+  baseEl.value  = '';
+  modelEl.value = '';
+  baseEl.placeholder  = p.baseURL || 'https://...';
+  modelEl.placeholder = p.defaultModel || '';
+  // Provider offline / cần baseURL local thì prefill sẵn cho tiện
+  if (id === 'ollama')   baseEl.value = 'http://127.0.0.1:11434';
+  if (id === 'lmstudio') baseEl.value = 'http://127.0.0.1:1234/v1';
+  if (p.defaultModel)    modelEl.value = p.defaultModel;
   document.getElementById('ai-key-hint').textContent = p.offline ? '(offline — không cần key)' : '';
+  // Reset cả model dropdown để user biết phải Refresh lại
+  const sel = document.getElementById('ai-model-list');
+  if (sel) sel.innerHTML = '<option value="">— bấm 🔄 Refresh để load —</option>';
 }
 
 async function refreshModels() {
   const sel = document.getElementById('ai-model-list');
-  sel.innerHTML = '<option value="">đang tải...</option>';
+  const opts = getAIOpts();
+  sel.innerHTML = `<option value="">đang tải từ ${opts.provider}...</option>`;
+  document.getElementById('ai-settings-status').textContent = '';
   try {
     const r = await fetch(`/api/public/g/${NAME}/analyze/models`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(getAIOpts()),
+      body: JSON.stringify(opts),
     });
     const j = await r.json();
-    if (j.error) throw new Error(j.error);
-    sel.innerHTML = '<option value="">— chọn model —</option>' +
-      (j.models||[]).map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.label||m.id)}</option>`).join('');
-    document.getElementById('ai-settings-status').textContent = `✓ tải được ${(j.models||[]).length} model`;
+    if (!r.ok || j.error) throw new Error(j.error || ('HTTP ' + r.status));
+    const models = j.models || [];
+    if (!models.length) {
+      sel.innerHTML = '<option value="">(provider trả về 0 model)</option>';
+      document.getElementById('ai-settings-status').textContent = '⚠ provider không trả model nào — kiểm tra baseURL/key';
+      return;
+    }
+    sel.innerHTML = '<option value="">— chọn model (' + models.length + ') —</option>' +
+      models.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.label||m.id)}</option>`).join('');
+    document.getElementById('ai-settings-status').textContent = `✓ tải được ${models.length} model từ ${opts.provider}`;
   } catch(e) {
-    sel.innerHTML = '<option value="">lỗi: '+escapeHtml(e.message)+'</option>';
-    document.getElementById('ai-settings-status').textContent = 'refresh model lỗi: ' + e.message;
+    sel.innerHTML = '<option value="">lỗi (xem chi tiết bên dưới)</option>';
+    document.getElementById('ai-settings-status').innerHTML =
+      '<span style="color:var(--red)">refresh model lỗi: ' + escapeHtml(e.message) +
+      '</span><br><span style="font-size:11px; color:var(--dim)">→ kiểm tra: (1) provider đúng chưa, (2) API key có quyền list models, (3) Base URL nếu là openai-compat/lmstudio. Có thể bỏ qua bước này và gõ tay model name vào ô "Model (manual override)".</span>';
   }
 }
 
