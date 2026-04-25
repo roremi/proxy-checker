@@ -286,6 +286,101 @@ function categorizeHost(host) {
   return null;
 }
 
+// ─── Tech-stack detection từ response headers / cookies / body ───
+// Trả về list { name, evidence } phát hiện được trên 1 flow.
+const TECH_HEADER_RULES = [
+  // CDN / Edge / WAF
+  { rx: /^server$/i,            test:/akamai|akamaighost/i,          name:'Akamai',                cat:'cdn' },
+  { rx: /^x-akamai/i,           test:/.+/,                           name:'Akamai (Edge/Bot Manager)', cat:'waf' },
+  { rx: /^server$/i,            test:/cloudflare/i,                  name:'Cloudflare',            cat:'cdn' },
+  { rx: /^cf-(ray|cache-status|connecting-ip|polished|bgj)$/i, test:/.+/, name:'Cloudflare', cat:'cdn' },
+  { rx: /^server$/i,            test:/nginx/i,                       name:'nginx',                 cat:'webserver' },
+  { rx: /^server$/i,            test:/apache/i,                      name:'Apache httpd',          cat:'webserver' },
+  { rx: /^server$/i,            test:/openresty/i,                   name:'OpenResty (nginx+lua)', cat:'webserver' },
+  { rx: /^server$/i,            test:/litespeed/i,                   name:'LiteSpeed',             cat:'webserver' },
+  { rx: /^server$/i,            test:/caddy/i,                       name:'Caddy',                 cat:'webserver' },
+  { rx: /^server$/i,            test:/envoy/i,                       name:'Envoy proxy',           cat:'proxy' },
+  { rx: /^server$/i,            test:/istio/i,                       name:'Istio service mesh',    cat:'mesh' },
+  { rx: /^server$/i,            test:/gunicorn/i,                    name:'Gunicorn (Python)',     cat:'app-server' },
+  { rx: /^server$/i,            test:/uvicorn/i,                     name:'Uvicorn (ASGI)',        cat:'app-server' },
+  { rx: /^server$/i,            test:/tomcat|coyote/i,               name:'Apache Tomcat',         cat:'app-server' },
+  { rx: /^server$/i,            test:/jetty/i,                       name:'Jetty',                 cat:'app-server' },
+  { rx: /^server$/i,            test:/iis/i,                         name:'Microsoft IIS',         cat:'webserver' },
+  { rx: /^server$/i,            test:/aws/i,                         name:'AWS',                   cat:'cloud' },
+  { rx: /^server$/i,            test:/awselb|elasticloadbalancing/i, name:'AWS ELB/ALB',           cat:'lb' },
+  { rx: /^server$/i,            test:/cloudfront/i,                  name:'AWS CloudFront',        cat:'cdn' },
+  { rx: /^x-amz-/i,             test:/.+/,                           name:'AWS (S3/API Gateway)',  cat:'cloud' },
+  { rx: /^x-amz-cf-/i,          test:/.+/,                           name:'AWS CloudFront',        cat:'cdn' },
+  { rx: /^x-served-by$/i,       test:/cache-/i,                      name:'Fastly',                cat:'cdn' },
+  { rx: /^x-fastly-/i,          test:/.+/,                           name:'Fastly',                cat:'cdn' },
+  { rx: /^x-vercel-/i,          test:/.+/,                           name:'Vercel',                cat:'cloud' },
+  { rx: /^x-nf-/i,              test:/.+/,                           name:'Netlify',               cat:'cloud' },
+  { rx: /^server$/i,            test:/google frontend|gws|gse/i,     name:'Google Frontend (GFE)', cat:'cloud' },
+  { rx: /^x-goog-/i,            test:/.+/,                           name:'Google Cloud',          cat:'cloud' },
+  { rx: /^server$/i,            test:/azure/i,                       name:'Microsoft Azure',       cat:'cloud' },
+  { rx: /^x-azure-/i,           test:/.+/,                           name:'Microsoft Azure',       cat:'cloud' },
+  { rx: /^server$/i,            test:/imperva|incapsula/i,           name:'Imperva/Incapsula WAF', cat:'waf' },
+  { rx: /^x-iinfo$/i,           test:/.+/,                           name:'Imperva Incapsula',     cat:'waf' },
+  { rx: /^server$/i,            test:/sucuri/i,                      name:'Sucuri WAF',            cat:'waf' },
+  { rx: /^server$/i,            test:/varnish/i,                     name:'Varnish cache',         cat:'cache' },
+  { rx: /^x-varnish$/i,         test:/.+/,                           name:'Varnish cache',         cat:'cache' },
+  // App framework
+  { rx: /^x-powered-by$/i,      test:/.+/,                           name:'(X-Powered-By header)', cat:'framework' }, // value sẽ là evidence
+  { rx: /^x-aspnet-version$/i,  test:/.+/,                           name:'ASP.NET',               cat:'framework' },
+  { rx: /^x-aspnetmvc-version$/i,test:/.+/,                          name:'ASP.NET MVC',           cat:'framework' },
+  { rx: /^x-rack-/i,            test:/.+/,                           name:'Rack (Ruby)',           cat:'framework' },
+  { rx: /^x-runtime$/i,         test:/.+/,                           name:'Rails-like X-Runtime',  cat:'framework' },
+  { rx: /^x-django-/i,          test:/.+/,                           name:'Django',                cat:'framework' },
+  { rx: /^x-drupal-/i,          test:/.+/,                           name:'Drupal',                cat:'framework' },
+  { rx: /^x-generator$/i,       test:/.+/,                           name:'(X-Generator header)',  cat:'framework' },
+  // Bot / fraud headers (đã có ở FP_HEADER_RX nhưng map sang vendor)
+  { rx: /^x-datadome/i,         test:/.+/,                           name:'DataDome',              cat:'bot-defense' },
+  { rx: /^x-px-/i,              test:/.+/,                           name:'PerimeterX/HUMAN',      cat:'bot-defense' },
+  { rx: /^x-distil-/i,          test:/.+/,                           name:'Imperva Distil',        cat:'bot-defense' },
+  { rx: /^x-shape-/i,           test:/.+/,                           name:'Shape Security (F5)',   cat:'bot-defense' },
+  { rx: /^x-kasada-/i,          test:/.+/,                           name:'Kasada',                cat:'bot-defense' },
+];
+
+const TECH_COOKIE_RULES = [
+  { rx: /^_abck$|^bm_sz$|^bm_sv$|^ak_bmsc$/i, name:'Akamai Bot Manager',      cat:'bot-defense' },
+  { rx: /^datadome$/i,                        name:'DataDome',                cat:'bot-defense' },
+  { rx: /^_pxhd$|^_px2?$|^_pxvid$/i,          name:'PerimeterX/HUMAN',        cat:'bot-defense' },
+  { rx: /^incap_ses|^visid_incap/i,           name:'Imperva Incapsula',       cat:'waf' },
+  { rx: /^__cf_bm$|^cf_clearance$/i,          name:'Cloudflare Bot Mgmt',     cat:'bot-defense' },
+  { rx: /^JSESSIONID$/i,                      name:'Java/Servlet (JSESSIONID)', cat:'framework' },
+  { rx: /^PHPSESSID$/i,                       name:'PHP (PHPSESSID)',         cat:'framework' },
+  { rx: /^ASP\.NET_SessionId$|^\.AspNetCore/i,name:'ASP.NET',                 cat:'framework' },
+  { rx: /^laravel_session$|^XSRF-TOKEN$/i,    name:'Laravel (PHP)',           cat:'framework' },
+  { rx: /^connect\.sid$/i,                    name:'Express.js (Node)',       cat:'framework' },
+  { rx: /^_session$/i,                        name:'Rack/Rails',              cat:'framework' },
+  { rx: /^csrftoken$|^sessionid$/i,           name:'Django',                  cat:'framework' },
+  { rx: /^TS[0-9a-f]{6,}$/i,                  name:'F5 BIG-IP',               cat:'lb' },
+  { rx: /^BIGipServer/i,                      name:'F5 BIG-IP',               cat:'lb' },
+];
+
+function detectTech(resH, host) {
+  const out = [];
+  for (const [hk, hv] of Object.entries(resH || {})) {
+    const lk = hk.toLowerCase();
+    const val = String(Array.isArray(hv) ? hv[0] : hv || '');
+    for (const r of TECH_HEADER_RULES) {
+      if (r.rx.test(lk) && r.test.test(val)) {
+        const evidence = `${hk}: ${val.slice(0, 100)}`;
+        const name = r.name.startsWith('(') ? `${r.cat}: ${val.slice(0, 60)}` : r.name;
+        out.push({ name, cat: r.cat, evidence, host });
+      }
+    }
+  }
+  return out;
+}
+
+function detectTechFromCookieName(name, host) {
+  for (const r of TECH_COOKIE_RULES) {
+    if (r.rx.test(name)) return { name: r.name, cat: r.cat, evidence: `Set-Cookie: ${name}`, host };
+  }
+  return null;
+}
+
 // ─── Main analyzer ───
 // opts:
 //   since (ms epoch) | since_minutes
@@ -345,6 +440,8 @@ function analyzeGateway(name, opts = {}) {
     pii_in_url: [],
     apps: {},              // appName → { name, category, hits, hosts:[] }
     domains: {},           // rootDomain → { domain, hits, hosts:[], errs, bytes }
+    tech_stack: {},        // techName → { name, cat, hits, hosts:[], evidence:[] }
+    interesting_samples: [], // [{ host, method, path, status, req_ct, res_ct, req_body_excerpt, res_body_excerpt, key_req_headers, key_res_headers }]
   };
 
   for (const f of flows) {
@@ -461,8 +558,26 @@ function analyzeGateway(name, opts = {}) {
           if (nm && !report.cookies_set[nm]) {
             report.cookies_set[nm] = { host, sample: c.trim().slice(0, 120) };
           }
+          // tech detection từ tên cookie
+          const tc = nm ? detectTechFromCookieName(nm, host) : null;
+          if (tc) {
+            const k = tc.name;
+            const t = report.tech_stack[k] || (report.tech_stack[k] = { name: tc.name, cat: tc.cat, hits: 0, hosts: [], evidence: [] });
+            t.hits++;
+            if (!t.hosts.includes(host)) t.hosts.push(host);
+            if (t.evidence.length < 3 && !t.evidence.includes(tc.evidence)) t.evidence.push(tc.evidence);
+          }
         }
       }
+    }
+
+    // 6b) Tech stack từ response headers (Server / X-Powered-By / Via / CF-Ray / Akamai...)
+    for (const tc of detectTech(resH, host)) {
+      const k = tc.name;
+      const t = report.tech_stack[k] || (report.tech_stack[k] = { name: tc.name, cat: tc.cat, hits: 0, hosts: [], evidence: [] });
+      t.hits++;
+      if (!t.hosts.includes(host)) t.hosts.push(host);
+      if (t.evidence.length < 3 && !t.evidence.includes(tc.evidence)) t.evidence.push(tc.evidence);
     }
 
     // 7) Body field scan (only if body is small JSON)
@@ -493,6 +608,56 @@ function analyzeGateway(name, opts = {}) {
   report.summary.unique_domains = Object.keys(report.domains).length;
   report.summary.unique_apps    = Object.keys(report.apps).length;
 
+  // ─── Interesting samples: chọn flow tiêu biểu cho mỗi tracker/risk endpoint/auth ───
+  // Mục đích: cho AI thấy data thật (không chỉ aggregate) để phân tích sâu.
+  const seenSamples = new Set();
+  function addSample(f, why) {
+    if (!f || report.interesting_samples.length >= 25) return;
+    const k = (f.host || '') + '|' + (f.path || '').slice(0, 60);
+    if (seenSamples.has(k)) return;
+    seenSamples.add(k);
+    const reqH = safeJSON(f.req_headers);
+    const resH2 = safeJSON(f.res_headers);
+    const pickH = (H) => {
+      const out = {};
+      for (const [hk, hv] of Object.entries(H || {})) {
+        const lk = hk.toLowerCase();
+        if (/^(server|via|x-|cf-|set-cookie|content-type|user-agent|authorization|cookie|location|www-authenticate)/i.test(lk)) {
+          out[hk] = String(Array.isArray(hv) ? hv[0] : hv).slice(0, 200);
+        }
+      }
+      return out;
+    };
+    report.interesting_samples.push({
+      why,
+      host: f.host,
+      method: f.method,
+      path: (f.path || '').slice(0, 200),
+      status: f.status,
+      req_body_excerpt: decodeBody(f.req_body_b64, 600),
+      res_body_excerpt: decodeBody(f.res_body_b64, 600),
+      key_req_headers: pickH(reqH),
+      key_res_headers: pickH(resH2),
+    });
+  }
+  // pick 1 flow per tracker vendor / risk endpoint / auth
+  const trackerVendorPicked = new Set();
+  for (const f of flows) {
+    const cat = categorizeHost(f.host || '');
+    if (cat && !trackerVendorPicked.has(cat.vendor)) {
+      trackerVendorPicked.add(cat.vendor);
+      addSample(f, `tracker:${cat.vendor}`);
+    }
+  }
+  for (const r of report.risk_endpoints.slice(0, 8)) {
+    const f = flows.find(x => x.host === r.host && (x.path || '').startsWith(r.path.slice(0, 40)));
+    addSample(f, `risk:${r.why}`);
+  }
+  for (const a of report.auth_chain.slice(0, 4)) {
+    const f = flows.find(x => x.host === a.host && (x.path || '').startsWith(a.path.slice(0, 40)));
+    addSample(f, 'auth');
+  }
+
   // Convert maps to arrays sorted by hits
   report.trackers = Object.values(report.trackers).sort((a, b) => b.hits - a.hits);
   report.fp_headers = Object.values(report.fp_headers).sort((a, b) => b.count - a.count);
@@ -503,6 +668,7 @@ function analyzeGateway(name, opts = {}) {
     .map(([host, count]) => ({ host, count }));
   report.apps = Object.values(report.apps).sort((a, b) => b.hits - a.hits);
   report.domains = Object.values(report.domains).sort((a, b) => b.hits - a.hits).slice(0, 50);
+  report.tech_stack = Object.values(report.tech_stack).sort((a, b) => b.hits - a.hits);
   report.auth_chain.sort((a, b) => a.ts - b.ts);
 
   // ─── Geo mismatch detection ───
@@ -607,8 +773,9 @@ Liệt kê **chính xác từng field** xuất hiện trong report (header / bod
 - **Hành vi user (behavioral)**: touch/mouse, scroll, typing cadence, gyroscope, accelerometer, focus events, session replay, page sequence, click heatmap.
 - **Tài khoản / Phiên**: userID, JWT claims (decode hiện ra), session cookie, correlation/trace ID, A/B bucket.
 
-## 3. Tracker / Fraud engine phát hiện
-Với mỗi vendor (**ThreatMetrix**, **FingerprintJS**, **Sift**, **Akamai BotManager**, **DataDome**, **PerimeterX**, **Arkose**, **Stripe Radar**, **Forter**, **Riskified**, **Adjust/AppsFlyer/Branch/Singular**...): họ chạy ở đâu (host/path), gửi field gì, mục đích (fraud / attribution / ads / session replay).
+## 3. Tracker / Fraud engine & Tech stack phát hiện
+NHÓM A — **Tech stack / hạ tầng** (đọc từ \`tech_stack[]\` trong report): CDN, WAF, bot-defense, app-server, framework. Mỗi cái nêu **vendor** + **bằng chứng** (header/cookie cụ thể). Ví dụ: "Akamai (CDN + Bot Manager) — \`Server: AkamaiGHost\`, cookie \`_abck\`, \`bm_sz\`", "Cloudflare — \`cf-ray\`, \`__cf_bm\`", "nginx 1.25", "ASP.NET Core", "Express.js (\`connect.sid\`)".
+NHÓM B — **Tracker / Fraud SDK** (đọc từ \`trackers[]\`): với mỗi vendor (**ThreatMetrix**, **FingerprintJS**, **Sift**, **Akamai Bot Manager**, **DataDome**, **PerimeterX**, **Arkose**, **Stripe Radar**, **Forter**, **Riskified**, **Adjust/AppsFlyer/Branch/Singular**, **Sentry**, **Hotjar/FullStory/Clarity**...): họ chạy ở host nào, gửi field gì, mục đích (fraud / attribution / ads / session replay).
 
 ## 4. Hành vi đang bị theo dõi (behavior tracking)
 Cụ thể những hành vi nào được ghi: chuyển trang, thời gian dừng lại, search query, item viewed, add-to-cart, login attempt, geo movement, app foreground/background, biometric prompt... → endpoint nào nhận.
@@ -627,7 +794,8 @@ Hành động thực tế người dùng làm được: reset advertising ID, đ
 
 QUY TẮC TRÌNH BÀY:
 - Dùng \`**bold**\` cho vendor + field name, \`\\\`code\\\`\` cho header/path/cookie name.
-- Mỗi bullet 1 ý, ≤ 2 dòng. Tổng ~400–700 từ. Không in lại block JSON. Không thêm lời chào/kết.`;
+- Mỗi bullet 1 ý, ≤ 2 dòng. Tổng ~600–1000 từ. Không in lại block JSON. Không thêm lời chào/kết.
+- BẮT BUỘC đọc HẾT các field trong report: \`tech_stack\`, \`trackers\`, \`fp_headers\`, \`fp_body_fields\`, \`cookies_set\`, \`risk_endpoints\`, \`auth_chain\`, \`geo_signals\`, \`geo_mismatches\`, \`jwt_payload_samples\`, \`interesting_samples\` (đặc biệt header/body excerpt). Không bỏ sót vendor/field nào có hits ≥ 1.\n- \`interesting_samples\` chứa request/response thật → trích dẫn header và body cụ thể khi cần dẫn chứng.`;
 
 function buildCompactReport(report) {
   return {
@@ -639,16 +807,18 @@ function buildCompactReport(report) {
     risk_reasons: report.risk_reasons,
     apps:        report.apps.slice(0, 15),
     domains:     report.domains.slice(0, 25),
+    tech_stack:  (report.tech_stack || []).slice(0, 30),
     trackers:    report.trackers.slice(0, 25),
     fp_headers:  report.fp_headers.slice(0, 30).map(h => ({ h: h.header, n: h.count, why: h.why, sample: (h.sample_value || '').slice(0, 80) })),
-    fp_body_fields: report.fp_body_fields.slice(0, 25),
-    risk_endpoints: report.risk_endpoints.slice(0, 20),
-    cookies_set:  report.cookies_set.slice(0, 25).map(c => ({ name: c.name, host: c.host })),
+    fp_body_fields: report.fp_body_fields.slice(0, 30),
+    risk_endpoints: report.risk_endpoints.slice(0, 25),
+    cookies_set:  report.cookies_set.slice(0, 30).map(c => ({ name: c.name, host: c.host })),
     auth_chain:   report.auth_chain.slice(0, 20),
     geo_signals:  report.geo_signals,
     geo_mismatches: report.geo_mismatches,
-    top_hosts:    report.top_hosts.slice(0, 15),
-    jwt_payload_samples: report.jwt_tokens.slice(0, 3).map(j => j.payload),
+    top_hosts:    report.top_hosts.slice(0, 20),
+    jwt_payload_samples: report.jwt_tokens.slice(0, 4).map(j => ({ host: j.host, header: j.header, payload: j.payload })),
+    interesting_samples: (report.interesting_samples || []).slice(0, 20),
   };
 }
 
