@@ -1,0 +1,21 @@
+[Unit]
+Description=dnsproxy via SOCKS for gateway %i
+After=network-online.target tun2socks@%i.service openvpn-server@%i.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dnsproxy-%i
+Group=dnsproxy-%i
+EnvironmentFile=/etc/openvpn/gateways/%i/dnsproxy.env
+# Run as root (+ prefix) so we can kill orphan binders left by deleted gateways.
+ExecStartPre=+/usr/local/sbin/dnsproxy-prestart %i
+ExecStart=/usr/local/bin/dnsproxy --listen=127.0.0.1 --port=${DNS_PORT} --upstream=${DNS_UPSTREAM_1} --upstream=${DNS_UPSTREAM_2} --fallback=${DNS_FALLBACK_1} --fallback=${DNS_FALLBACK_2} --upstream-mode=parallel --timeout=4s --bootstrap=${DNS_PORT_BOOTSTRAP}
+KillMode=mixed
+TimeoutStopSec=5
+Restart=on-failure
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

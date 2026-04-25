@@ -1,0 +1,11 @@
+[Unit]
+Description=Run tun2socks watchdog every 30 seconds for gateway %i
+After=tun2socks@%i.service
+
+[Timer]
+OnBootSec=120s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=multi-user.target

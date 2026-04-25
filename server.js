@@ -8,9 +8,12 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 const { randomUUID } = require('crypto');
 const fs   = require('fs');
 const path = require('path');
+const http = require('http');
+const captures = require('./captures');
 
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+// Captures from mitmproxy include base64 bodies up to ~64KB → JSON payload can hit ~100KB.
+app.use(express.json({ limit: '8mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const jobs       = new Map();   // jobId → { total, done, results }
@@ -86,17 +89,36 @@ async function detectAndTestProxy(rawInput) {
   const order = forced
     ? [forced === 'http' || forced === 'https' ? 'http' : 'socks5']
     : ['socks5', 'http'];
+  // Try multiple IP-echo endpoints over both HTTPS and plain HTTP.
+  // Some proxies (port-restricted / cheap residential) only allow port 80,
+  // or block specific hosts (e.g. api.ipify.org). Fall back gracefully.
+  const TEST_URLS = [
+    'https://api.ipify.org?format=json',
+    'http://api.ipify.org/?format=json',
+    'https://ifconfig.me/ip',
+    'http://ifconfig.me/ip',
+    'http://ip-api.com/json/?fields=query',
+  ];
   const errs = [];
   for (const sch of order) {
     const url = buildProxyUrl(sch, p);
-    try {
-      const agent = sch === 'socks5' ? new SocksProxyAgent(url) : new HttpsProxyAgent(url);
-      const r = await axios.get('https://api.ipify.org?format=json', {
-        httpsAgent: agent, httpAgent: agent, timeout: 15000,
-      });
-      if (r.data && r.data.ip) return { scheme: sch, url, exitIp: r.data.ip, parsed: p };
-      errs.push(`${sch}: no IP in response`);
-    } catch(e) { errs.push(`${sch}: ${e.code || e.message}`); }
+    let lastErr = null;
+    for (const testUrl of TEST_URLS) {
+      try {
+        const agent = sch === 'socks5' ? new SocksProxyAgent(url) : new HttpsProxyAgent(url);
+        const r = await axios.get(testUrl, {
+          httpsAgent: agent, httpAgent: agent, timeout: 15000,
+          responseType: 'text', transformResponse: [d => d],
+        });
+        const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
+        // Extract IPv4 from JSON or plain text
+        const m = body.match(/(?:"(?:ip|query)"\s*:\s*"([^"]+)")|(\b\d{1,3}(?:\.\d{1,3}){3}\b)/);
+        const ip = m ? (m[1] || m[2]) : null;
+        if (ip) return { scheme: sch, url, exitIp: ip, parsed: p };
+        lastErr = `no IP in response from ${testUrl}`;
+      } catch(e) { lastErr = `${testUrl} -> ${e.code || e.message}`; }
+    }
+    errs.push(`${sch}: ${lastErr}`);
   }
   throw new Error(errs.join(' | '));
 }
@@ -606,28 +628,30 @@ app.get('/api/vpn/wg/status', requireVpnToken, (req, res) => {
 const GW_DIR = '/etc/openvpn/gateways';
 const GW_DATA = path.join(__dirname, 'gateways.json');
 
-// Country → DNS mapping: DoT upstreams (via proxy) + direct fallback (if dnsproxy down)
+// Country → DNS mapping: DoH (HTTPS:443) upstreams via SOCKS proxy + direct fallback IP (only used if dnsproxy down).
+// DoT (port 853) is NOT used because many SOCKS proxies block/throttle non-443 ports → silent timeouts → dnsproxy crashes.
+// DoH always uses 443 (the same port as normal HTTPS) so it tunnels reliably through any SOCKS5/HTTP CONNECT proxy.
 const COUNTRY_DNS = {
-  CN: { u1: 'tls://223.5.5.5:853',     u2: 'tls://119.29.29.29:853', fallback: '223.5.5.5'  },  // AliDNS + DNSPod
-  HK: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  TW: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  JP: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  KR: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  SG: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  RU: { u1: 'tls://8.8.8.8:853',       u2: 'tls://8.8.4.4:853',      fallback: '8.8.8.8'    },  // 1.1.1.1 may be blocked
-  IR: { u1: 'tls://8.8.8.8:853',       u2: 'tls://8.8.4.4:853',      fallback: '8.8.8.8'    },
-  TR: { u1: 'tls://8.8.8.8:853',       u2: 'tls://1.1.1.1:853',      fallback: '8.8.8.8'    },
-  VN: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  TH: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  ID: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  MY: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  IN: { u1: 'tls://1.1.1.1:853',       u2: 'tls://8.8.8.8:853',      fallback: '1.1.1.1'    },
-  US: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
-  GB: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
-  DE: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
-  FR: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
-  NL: { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },
-  _:  { u1: 'tls://1.1.1.1:853',       u2: 'tls://1.0.0.1:853',      fallback: '1.1.1.1'    },  // default
+  CN: { u1: 'https://dns.alidns.com/dns-query',  u2: 'https://doh.pub/dns-query',         fallback: '223.5.5.5' },
+  HK: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  TW: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  JP: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  KR: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  SG: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  RU: { u1: 'https://dns.google/dns-query',      u2: 'https://dns.quad9.net/dns-query',   fallback: '8.8.8.8'   },
+  IR: { u1: 'https://dns.google/dns-query',      u2: 'https://dns.quad9.net/dns-query',   fallback: '8.8.8.8'   },
+  TR: { u1: 'https://dns.google/dns-query',      u2: 'https://1.1.1.1/dns-query',         fallback: '8.8.8.8'   },
+  VN: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  TH: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  ID: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  MY: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  IN: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  US: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  GB: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  DE: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  FR: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  NL: { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },
+  _:  { u1: 'https://1.1.1.1/dns-query',         u2: 'https://dns.google/dns-query',      fallback: '1.1.1.1'   },  // default
 };
 
 // Quick country lookup via ipinfo.io (free, no auth, 50k/mo)
@@ -696,6 +720,7 @@ app.get('/api/gateways', requireVpnToken, (req, res) => {
     const gw = { ...gateways[name] };
     try { execSync(`systemctl is-active openvpn-server@${gw.name}`); gw.vpn_running = true; } catch(_) { gw.vpn_running = false; }
     try { execSync(`systemctl is-active tun2socks@${gw.name}`); gw.tun_running = true; } catch(_) { gw.tun_running = false; }
+    try { execSync(`systemctl is-active mitmproxy@${gw.name}`); gw.mitm_running = true; } catch(_) { gw.mitm_running = false; }
     gw.running = gw.vpn_running && gw.tun_running;
     // Redact password in proxy_url for display
     try {
@@ -756,6 +781,13 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
     const gwPath     = path.join(GW_DIR, name);
     fs.mkdirSync(gwPath, { recursive: true });
 
+    // 3b. Pre-flight cleanup — kill anything left over from a previous gateway with the same indexes
+    //     (orphan dnsproxy still bound to port 15300+vpnIdx, stale TUN dev, leftover symlink, etc.)
+    const dnsPort = 15300 + vpnIdx;
+    try { execSync(`fuser -k ${dnsPort}/tcp ${dnsPort}/udp 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
+    try { execSync(`ip link delete ${t2sDev} 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
+    try { fs.unlinkSync(`/etc/openvpn/server/${name}.conf`); } catch(_){}
+
     // 4. tun2socks env file
     fs.writeFileSync(path.join(gwPath, 'tun2socks.env'),
       `TUN_DEV=${t2sDev}\nTUN_IP=${t2sIp}\nPROXY_URL=${normalizedProxy}\n`);
@@ -769,12 +801,27 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
     // fwmark = TABLE_ID (decimal) mapped to hex, unique per gateway
     const fwmark = `0x${tableId.toString(16)}`;
 
-    // 5. routing env for up.sh/down.sh
+    // 4c. Per-gateway mitmproxy OS user (so its outbound is fwmark-routed via THIS gateway's tunnel)
+    const mitmUser = `mitm-${name}`;
+    try { execSync(`id ${mitmUser}`, { stdio:'ignore' }); } catch(_) {
+      execSync(`useradd -r -M -s /bin/false -d /var/lib/mitmproxy ${mitmUser}`);
+    }
+    const mitmUid  = parseInt(execSync(`id -u ${mitmUser}`).toString().trim(), 10);
+    const mitmPort = 18080 + vpnIdx;
+
+    // 5. routing env for up.sh/down.sh (now also carries MITM_UID + MITM_PORT)
     fs.writeFileSync(path.join(gwPath, 'routing.env'),
-      `TABLE_ID=${tableId}\nTUN_DEV=${t2sDev}\nVPN_SUBNET=${vpnSubnet}\nDNSPROXY_UID=${gwUid}\nFWMARK=${fwmark}\n`);
+      `TABLE_ID=${tableId}\nTUN_DEV=${t2sDev}\nVPN_SUBNET=${vpnSubnet}\nDNSPROXY_UID=${gwUid}\nFWMARK=${fwmark}\nMITM_UID=${mitmUid}\nMITM_PORT=${mitmPort}\n`);
+
+    // 5a. mitm.env consumed by mitmproxy@<name>.service + capture-addon.py
+    let captureToken = '';
+    try { captureToken = fs.readFileSync('/etc/openvpn/mitm-ca/.capture-token', 'utf8').trim(); } catch(_){}
+    fs.writeFileSync(path.join(gwPath, 'mitm.env'),
+      `MITM_PORT=${mitmPort}\nMITM_UID=${mitmUid}\nGW_NAME=${name}\nCAPTURE_URL=http://127.0.0.1:${PORT}/api/_internal/capture\nCAPTURE_TOKEN=${captureToken}\nMAX_BODY=65536\n`);
+    // Allow the mitm user to read its env file (systemd reads it as the User= user)
+    try { execSync(`chgrp ${mitmUser} ${path.join(gwPath, 'mitm.env')} && chmod 640 ${path.join(gwPath, 'mitm.env')}`, { shell:'/bin/bash' }); } catch(_){}
 
     // 5b. Detect country from exit IP → select per-country DNS servers
-    const dnsPort = 15300 + vpnIdx;
     const countryCode = await getCountryCode(exitIp);
     const dnsCfg = COUNTRY_DNS[countryCode] || COUNTRY_DNS['_'];
 
@@ -842,6 +889,7 @@ down "/etc/openvpn/gateways/down.sh ${name}"
       table_id: tableId, vpn_subnet_index: vpnIdx, t2s_subnet_index: t2sIdx,
       vpn_subnet: vpnSubnet, t2s_dev: t2sDev,
       gw_user: gwUser, gw_uid: gwUid, fwmark,
+      mitm_user: mitmUser, mitm_uid: mitmUid, mitm_port: mitmPort, mitm_enabled: false,
       client_count: 0, created_at: new Date().toISOString(),
     };
     gwSave(gateways);
@@ -873,23 +921,119 @@ down "/etc/openvpn/gateways/down.sh ${name}"
   }
 });
 
-// DELETE gateway (full cleanup)
+// DELETE gateway (full cleanup: stop services, kill orphan procs, drop firewall, remove files)
 app.delete('/api/gateways/:name', requireVpnToken, (req, res) => {
   const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
   const gateways = gwLoad();
   if (!gateways[name]) return res.status(404).json({ error: 'Not found' });
-  try { execSync(`systemctl disable --now openvpn-server@${name}`); } catch(_){}
-  try { execSync(`systemctl disable --now tun2socks@${name}`); } catch(_){}
-  try { execSync(`systemctl disable --now dnsproxy@${name}`); } catch(_){}
-  try { execSync(`systemctl disable --now dnsmasq-gw@${name}`); } catch(_){}
-  try { execSync(`systemctl disable --now tun2socks-watchdog@${name}.timer`); } catch(_){}
-  // Remove per-gateway dnsproxy user
+  const gw = gateways[name];
+
+  // 1. Stop & disable services (ignore errors — units may already be down)
+  for (const unit of [
+    `openvpn-server@${name}`,
+    `tun2socks-watchdog@${name}.timer`,
+    `mitmproxy@${name}`,
+    `dnsmasq-gw@${name}`,
+    `dnsproxy@${name}`,
+    `tun2socks@${name}`,
+  ]) {
+    try { execSync(`systemctl disable --now ${unit}`, { stdio:'ignore' }); } catch(_){}
+    try { execSync(`systemctl reset-failed ${unit}`, { stdio:'ignore' }); } catch(_){}
+  }
+
+  // 2. Kill any orphan procs left holding the gateway's resources (port / IP / TUN dev)
+  //    These can survive `systemctl disable --now` if the service crash-looped or the binary forked.
+  try {
+    const dnsPort = 15300 + (gw.vpn_subnet_index ?? 0);
+    execSync(`fuser -k ${dnsPort}/tcp ${dnsPort}/udp 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' });
+  } catch(_){}
+  if (gw.mitm_port) {
+    try { execSync(`fuser -k ${gw.mitm_port}/tcp 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
+  }
+  if (gw.gw_user) {
+    try { execSync(`pkill -9 -u ${gw.gw_user} 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
+  }
+  if (gw.mitm_user) {
+    try { execSync(`pkill -9 -u ${gw.mitm_user} 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
+  }
+  if (gw.t2s_dev) {
+    try { execSync(`ip link delete ${gw.t2s_dev} 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
+  }
+  // Drop the per-gateway PREROUTING REDIRECT (no-op if MITM was not enabled)
+  if (gw.vpn_subnet && gw.mitm_port) {
+    try { execSync(`iptables -t nat -D PREROUTING -s ${gw.vpn_subnet} -p tcp -m multiport --dports 80,443 -j REDIRECT --to-port ${gw.mitm_port} 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
+  }
+
+  // 3. Remove per-gateway dnsproxy + mitm OS users
   try { execSync(`userdel dnsproxy-${name} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
+  try { execSync(`userdel mitm-${name}     2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
+
+  // 4. Drop firewall rule (UDP listening port)
+  if (gw.vpn_port) {
+    try {
+      execSync(`iptables -D INPUT -p udp --dport ${gw.vpn_port} -j ACCEPT 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' });
+      execSync(`iptables-save > /etc/iptables/rules.v4 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' });
+    } catch(_){}
+  }
+
+  // 5. Remove openvpn config symlink + gateway dir
   try { fs.unlinkSync(`/etc/openvpn/server/${name}.conf`); } catch(_){}
   try { fs.rmSync(path.join(GW_DIR, name), { recursive: true, force: true }); } catch(_){}
+
   delete gateways[name];
   gwSave(gateways);
   res.json({ ok: true });
+});
+
+// ── MITM (HTTPS interception) toggle per gateway ─────────────────────────────
+// Starts/stops mitmproxy@<name> and adds/removes the iptables PREROUTING REDIRECT
+// for TCP 80/443 from this gateway's VPN subnet. State is persisted to gateway record
+// + a marker file so up.sh can re-arm the rule when OpenVPN restarts.
+app.post('/api/gateways/:name/mitm/:action(start|stop|status)', requireVpnToken, (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const action = req.params.action;
+  const gateways = gwLoad();
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Gateway not found' });
+  if (!gw.mitm_port || !gw.vpn_subnet) return res.status(400).json({ error: 'Gateway has no MITM config (recreate it)' });
+
+  const markerFile = path.join(GW_DIR, name, 'mitm.enabled');
+  const redirectRuleArgs = `-s ${gw.vpn_subnet} -p tcp -m multiport --dports 80,443 -j REDIRECT --to-port ${gw.mitm_port}`;
+
+  if (action === 'status') {
+    let active = false;
+    try { execSync(`systemctl is-active mitmproxy@${name}`, { stdio:'ignore' }); active = true; } catch(_){}
+    let ruleActive = false;
+    try { execSync(`iptables -t nat -C PREROUTING ${redirectRuleArgs} 2>/dev/null`, { shell:'/bin/bash', stdio:'ignore' }); ruleActive = true; } catch(_){}
+    return res.json({ name, mitm_active: active, redirect_active: ruleActive, mitm_port: gw.mitm_port, marker: fs.existsSync(markerFile) });
+  }
+
+  try {
+    if (action === 'start') {
+      try { execSync(`systemctl daemon-reload`); } catch(_){}
+      try { execSync(`systemctl reset-failed mitmproxy@${name}`, { stdio:'ignore' }); } catch(_){}
+      execSync(`systemctl enable --now mitmproxy@${name}`);
+      // Add PREROUTING REDIRECT (idempotent)
+      execSync(`iptables -t nat -C PREROUTING ${redirectRuleArgs} 2>/dev/null || iptables -t nat -I PREROUTING 1 ${redirectRuleArgs}`, { shell:'/bin/bash' });
+      // Persist marker so up.sh can restore the rule after an openvpn restart
+      fs.writeFileSync(markerFile, '1\n');
+      gw.mitm_enabled = true;
+      gateways[name] = gw; gwSave(gateways);
+      return res.json({ ok: true, name, mitm_active: true, mitm_port: gw.mitm_port });
+    }
+    if (action === 'stop') {
+      // Remove redirect first so clients fail-open back to direct (no MITM hijack)
+      try { execSync(`iptables -t nat -D PREROUTING ${redirectRuleArgs} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
+      try { execSync(`systemctl disable --now mitmproxy@${name}`, { stdio:'ignore' }); } catch(_){}
+      try { fs.unlinkSync(markerFile); } catch(_){}
+      gw.mitm_enabled = false;
+      gateways[name] = gw; gwSave(gateways);
+      return res.json({ ok: true, name, mitm_active: false });
+    }
+  } catch(e) {
+    console.error('[mitm toggle]', e);
+    return res.status(500).json({ error: e.message || 'mitm toggle failed' });
+  }
 });
 
 // start/stop/restart (restricted via regex so /client and /test don't match here)
@@ -1180,4 +1324,115 @@ app.get('/api/stream/:jobId', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`[INFO] Proxy Checker → http://0.0.0.0:${PORT}`));
+// Use raw http server so we can attach WebSocket upgrade handler for /ws/captures
+const server = http.createServer(app);
+captures.attach(app, server, requireVpnToken);
+
+// ─────────────────────────────────────────────────────────────
+// PUBLIC per-gateway endpoints (NO TOKEN)
+// Anyone who knows the gateway name can: see status, toggle MITM,
+// download .ovpn (creates a new client cert), download CA cert.
+// Mounted AFTER captures.attach so /api/public/g/:name/captures (defined in captures.js) takes precedence.
+// ─────────────────────────────────────────────────────────────
+app.get('/api/public/g/:name/info', (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const gateways = gwLoad();
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Gateway not found' });
+  const out = {
+    name: gw.name, country: gw.country, exit_ip: gw.exit_ip,
+    vpn_port: gw.vpn_port, vpn_subnet: gw.vpn_subnet,
+    mitm_port: gw.mitm_port || null, mitm_enabled: !!gw.mitm_enabled,
+    server_ip: SERVER_IP, client_count: gw.client_count || 0,
+  };
+  try { execSync(`systemctl is-active openvpn-server@${name}`); out.vpn_running = true; } catch(_) { out.vpn_running = false; }
+  try { execSync(`systemctl is-active tun2socks@${name}`); out.tun_running = true; } catch(_) { out.tun_running = false; }
+  try { execSync(`systemctl is-active mitmproxy@${name}`); out.mitm_running = true; } catch(_) { out.mitm_running = false; }
+  out.running = out.vpn_running && out.tun_running;
+  res.json(out);
+});
+
+app.post('/api/public/g/:name/mitm/:action(start|stop)', (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const action = req.params.action;
+  const gateways = gwLoad();
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Gateway not found' });
+  if (!gw.mitm_port || !gw.vpn_subnet) return res.status(400).json({ error: 'Gateway has no MITM config' });
+  const markerFile = path.join(GW_DIR, name, 'mitm.enabled');
+  const ruleArgs = `-s ${gw.vpn_subnet} -p tcp -m multiport --dports 80,443 -j REDIRECT --to-port ${gw.mitm_port}`;
+  try {
+    if (action === 'start') {
+      try { execSync(`systemctl daemon-reload`); } catch(_){}
+      try { execSync(`systemctl reset-failed mitmproxy@${name}`, { stdio:'ignore' }); } catch(_){}
+      execSync(`systemctl enable --now mitmproxy@${name}`);
+      execSync(`iptables -t nat -C PREROUTING ${ruleArgs} 2>/dev/null || iptables -t nat -I PREROUTING 1 ${ruleArgs}`, { shell:'/bin/bash' });
+      fs.writeFileSync(markerFile, '1\n');
+      gw.mitm_enabled = true;
+    } else {
+      try { execSync(`iptables -t nat -D PREROUTING ${ruleArgs} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
+      try { execSync(`systemctl disable --now mitmproxy@${name}`, { stdio:'ignore' }); } catch(_){}
+      try { fs.unlinkSync(markerFile); } catch(_){}
+      gw.mitm_enabled = false;
+    }
+    gateways[name] = gw; gwSave(gateways);
+    res.json({ ok: true, mitm_enabled: gw.mitm_enabled });
+  } catch(e) {
+    console.error('[public mitm]', e);
+    res.status(500).json({ error: e.message || 'mitm toggle failed' });
+  }
+});
+
+app.post('/api/public/g/:name/client', (req, res) => {
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const clientName = (req.body.client_name || '').replace(/[^a-zA-Z0-9_-]/g,'').slice(0, 32);
+  if (!clientName) return res.status(400).json({ error: 'Invalid client name' });
+  const gateways = gwLoad();
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Gateway not found' });
+  const certName = `${name}_${clientName}`;
+  try {
+    execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-req ${certName} nopass 2>&1`, { shell:'/bin/bash' });
+    execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa sign-req client ${certName} 2>&1`, { shell:'/bin/bash' });
+    const ca   = fs.readFileSync('/etc/openvpn/easy-rsa/pki/ca.crt', 'utf8').trim();
+    const cert = fs.readFileSync(`/etc/openvpn/easy-rsa/pki/issued/${certName}.crt`, 'utf8');
+    const key  = fs.readFileSync(`/etc/openvpn/easy-rsa/pki/private/${certName}.key`, 'utf8').trim();
+    const ta   = fs.readFileSync('/etc/openvpn/server/ta.key', 'utf8').trim();
+    const certMatch = cert.match(/-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----/);
+    const certClean = certMatch ? certMatch[0].trim() : cert.trim();
+    const ovpn = `client
+dev tun
+proto udp
+remote ${SERVER_IP} ${gw.vpn_port}
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-GCM
+auth SHA256
+compress lz4-v2
+verb 3
+key-direction 1
+<ca>
+${ca}
+</ca>
+<cert>
+${certClean}
+</cert>
+<key>
+${key}
+</key>
+<tls-auth>
+${ta}
+</tls-auth>
+`;
+    gateways[name].client_count = (gw.client_count || 0) + 1;
+    gwSave(gateways);
+    res.setHeader('Content-Type', 'application/x-openvpn-profile');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}-${clientName}.ovpn"`);
+    res.send(ovpn);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+server.listen(PORT, '0.0.0.0', () => console.log(`[INFO] Proxy Checker → http://0.0.0.0:${PORT}`));

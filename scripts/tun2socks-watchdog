@@ -1,0 +1,95 @@
+#!/bin/bash
+# tun2socks-watchdog <gateway_name>
+# Periodic health check for a gateway. Restarts components that are stuck.
+# Called by tun2socks-watchdog@<name>.timer every 30s.
+#
+# Checks (fail-fast):
+#   1. TUN device is UP
+#   2. dnsproxy@<name>   is active (was the main failure mode — bind: address already in use)
+#   3. dnsmasq-gw@<name> is active
+#   4. DNS resolves through dnsmasq-gw (proves dnsproxy → SOCKS → upstream chain works)
+#   5. SOCKS proxy reaches the public internet (TCP test against api.ipify.org)
+#
+# On any failure, restart the chain: tun2socks → dnsproxy → dnsmasq-gw
+# (`reset-failed` first so systemd lifts its rate-limit; `fuser -k` clears orphan binders.)
+
+NAME=$1
+GW_DIR="/etc/openvpn/gateways/${NAME}"
+LOG_TAG="watchdog-${NAME}"
+
+[ -n "$NAME" ] || { echo "[watchdog] No gateway name given"; exit 1; }
+[ -d "$GW_DIR" ] || { echo "[$LOG_TAG] Gateway dir missing, skipping"; exit 0; }
+[ -f "${GW_DIR}/tun2socks.env" ] || { echo "[$LOG_TAG] tun2socks.env missing, skipping"; exit 0; }
+
+. "${GW_DIR}/tun2socks.env"
+[ -f "${GW_DIR}/dnsmasq-gw.env" ] && . "${GW_DIR}/dnsmasq-gw.env"
+[ -f "${GW_DIR}/dnsproxy.env"   ] && . "${GW_DIR}/dnsproxy.env"
+
+REASON=""
+
+if [ -z "$REASON" ] && ! ip link show "$TUN_DEV" up &>/dev/null; then
+    REASON="TUN $TUN_DEV is down"
+fi
+# Use is-failed (not is-active) so we tolerate the transient "activating"
+# state during systemd's own Restart=on-failure backoff. Acting on activating
+# would race with systemd and cause restart storms.
+if [ -z "$REASON" ] && systemctl is-failed --quiet "dnsproxy@${NAME}"; then
+    REASON="dnsproxy@${NAME} failed"
+fi
+if [ -z "$REASON" ] && systemctl is-failed --quiet "dnsmasq-gw@${NAME}"; then
+    REASON="dnsmasq-gw@${NAME} failed"
+fi
+if [ -z "$REASON" ] && [ -n "$VPN_GW_IP" ] && command -v dig &>/dev/null; then
+    if ! dig @"$VPN_GW_IP" -p 53 cloudflare.com +short +time=3 +tries=1 &>/dev/null; then
+        REASON="DNS resolve via $VPN_GW_IP:53 failed"
+    fi
+fi
+if [ -z "$REASON" ]; then
+    # Test proxy reachability with multiple endpoints — some cheap residential
+    # proxies block specific HTTPS hosts (e.g. api.ipify.org) but otherwise work
+    # fine. We only mark "Proxy not reachable" when ALL endpoints fail.
+    PROXY_OK=0
+    for U in \
+        http://api.ipify.org/ \
+        http://ifconfig.me/ip \
+        http://ip-api.com/json/?fields=query \
+        https://api.ipify.org \
+        https://ifconfig.me/ip ; do
+        if curl -s --max-time 8 -x "$PROXY_URL" "$U" >/dev/null 2>&1; then
+            PROXY_OK=1; break
+        fi
+    done
+    [ "$PROXY_OK" = 1 ] || REASON="Proxy not reachable (all test URLs failed)"
+fi
+
+if [ -n "$REASON" ]; then
+    # Flap protection: only restart the chain after N consecutive failures.
+    # Many residential/mobile rotating proxies have transient 8-15s pauses
+    # between IP rotations; a single missed probe is not worth nuking the
+    # whole chain (which interrupts active VPN client traffic).
+    STATE_DIR="/run/tun2socks-watchdog"
+    mkdir -p "$STATE_DIR" 2>/dev/null
+    FAIL_FILE="${STATE_DIR}/${NAME}.fail"
+    FAIL_COUNT=$(cat "$FAIL_FILE" 2>/dev/null || echo 0)
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    echo "$FAIL_COUNT" > "$FAIL_FILE"
+    echo "[$LOG_TAG] DEGRADED ($FAIL_COUNT/3): $REASON"
+    if [ "$FAIL_COUNT" -lt 3 ]; then
+        exit 0
+    fi
+    rm -f "$FAIL_FILE"
+    echo "[$LOG_TAG] FAIL: $REASON — restarting chain at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    systemctl reset-failed "tun2socks@${NAME}"   2>/dev/null
+    systemctl reset-failed "dnsproxy@${NAME}"    2>/dev/null
+    systemctl reset-failed "dnsmasq-gw@${NAME}"  2>/dev/null
+    [ -n "$DNS_PORT" ] && fuser -k "${DNS_PORT}/tcp" "${DNS_PORT}/udp" 2>/dev/null
+    systemctl restart "tun2socks@${NAME}"
+    sleep 2
+    systemctl restart "dnsproxy@${NAME}"
+    sleep 1
+    systemctl restart "dnsmasq-gw@${NAME}"
+    echo "[$LOG_TAG] Restart complete"
+else
+    rm -f "/run/tun2socks-watchdog/${NAME}.fail" 2>/dev/null
+    echo "[$LOG_TAG] OK"
+fi

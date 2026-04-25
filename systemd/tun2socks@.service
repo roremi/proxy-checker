@@ -1,0 +1,15 @@
+[Unit]
+Description=tun2socks gateway %i
+After=network.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/openvpn/gateways/%i/tun2socks.env
+ExecStartPre=/bin/bash -c 'ip tuntap add dev ${TUN_DEV} mode tun user root 2>/dev/null || true; ip addr flush dev ${TUN_DEV} 2>/dev/null || true; ip addr add ${TUN_IP}/30 dev ${TUN_DEV}; ip link set dev ${TUN_DEV} up; ip link set dev ${TUN_DEV} mtu 1400'
+ExecStart=/usr/local/bin/tun2socks -device ${TUN_DEV} -proxy ${PROXY_URL} -loglevel warn
+ExecStopPost=/bin/bash -c 'ip link set dev ${TUN_DEV} down 2>/dev/null || true; ip tuntap del dev ${TUN_DEV} mode tun 2>/dev/null || true'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

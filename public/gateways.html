@@ -51,6 +51,7 @@ tr:hover td{background:var(--surface2)}
   <strong style="color:var(--blue);margin-right:16px">⚡ Proxy Checker</strong>
   <a href="/" style="color:var(--dim);font-size:13px;padding:6px 12px;border-radius:6px;text-decoration:none">Checker</a>
   <a href="/gateways.html" style="background:var(--surface2);color:var(--blue);font-size:13px;padding:6px 12px;border-radius:6px;text-decoration:none">Gateways</a>
+  <a href="/captures.html" style="color:var(--dim);font-size:13px;padding:6px 12px;border-radius:6px;text-decoration:none">Captures</a>
 </nav>
 
 <div id="main">
@@ -76,8 +77,8 @@ tr:hover td{background:var(--surface2)}
   <div class="card">
     <h2>Active Gateways</h2>
     <table>
-      <thead><tr><th>Name</th><th>Status</th><th>Port</th><th>Exit IP</th><th>Clients</th><th>Actions</th></tr></thead>
-      <tbody id="gw-tbody"><tr><td colspan="6" style="color:var(--dim);text-align:center;padding:20px">Loading…</td></tr></tbody>
+      <thead><tr><th>Name</th><th>Status</th><th>Port</th><th>Exit IP</th><th>Clients</th><th>MITM</th><th>Actions</th></tr></thead>
+      <tbody id="gw-tbody"><tr><td colspan="7" style="color:var(--dim);text-align:center;padding:20px">Loading…</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -107,18 +108,34 @@ tr:hover td{background:var(--surface2)}
 const TOKEN='vpnadmin2026';
 let _cmGw='', _cmName='', _cmConf='';
 async function fetchApi(url,opts={}){opts.headers={...(opts.headers||{}),'x-vpn-token':TOKEN,'Content-Type':'application/json'};
-  const r=await fetch(url,opts);if(r.status===401)throw new Error('Unauthorized');const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'API Error');return d;}
+  let r;
+  try { r = await fetch(url,opts); }
+  catch(e){ throw new Error('Network error: '+e.message); }
+  if(r.status===401)throw new Error('Unauthorized (token sai?)');
+  const txt = await r.text();
+  let d={}; try { d = txt ? JSON.parse(txt) : {}; } catch(_){ d={ raw: txt }; }
+  if(!r.ok) throw new Error('HTTP '+r.status+': '+(d.error || d.raw || r.statusText || 'unknown'));
+  return d;}
 async function loadGateways(){try{const d=await fetchApi('/api/gateways');const tb=document.getElementById('gw-tbody');
-  if(!d.gateways.length){tb.innerHTML='<tr><td colspan="6" style="color:var(--dim);text-align:center;padding:20px">No gateways yet.</td></tr>';return;}
+  if(!d.gateways.length){tb.innerHTML='<tr><td colspan="7" style="color:var(--dim);text-align:center;padding:20px">No gateways yet.</td></tr>';return;}
   tb.innerHTML=d.gateways.map(g=>{let b;const running=g.vpn_running&&g.tun_running;
     if(running)b='<span class="badge badge-green">Running</span>';
     else if(!g.vpn_running&&!g.tun_running)b='<span class="badge badge-red">Stopped</span>';
     else b='<span class="badge badge-orange">Partial</span>';
+    const mitmBadge = g.mitm_running
+      ? '<span class="badge badge-green">ON</span>'
+      : '<span class="badge" style="background:var(--surface2);color:var(--dim)">OFF</span>';
+    const mitmBtn = g.mitm_running
+      ? `<button class="btn btn-sm" style="color:var(--orange)" onclick="toggleMitm('${esc(g.name)}',true)">Stop MITM</button>`
+      : `<button class="btn btn-sm" style="color:var(--purple)" onclick="toggleMitm('${esc(g.name)}',false)">Start MITM</button>`;
     return `<tr><td><strong>${esc(g.name)}</strong><div style="font-size:10px;color:var(--dim)">${esc(g.proxy_display||'')}</div></td>
       <td>${b}</td><td class="mono">${g.vpn_port}</td>
       <td class="mono">${esc(g.exit_ip||'?')} <button class="btn btn-sm" style="padding:2px 6px;font-size:10px" onclick="retest('${esc(g.name)}')">↻</button></td>
       <td class="mono">${g.client_count||0}</td>
+      <td>${mitmBadge}<div style="font-size:10px;color:var(--dim);margin-top:2px">port ${g.mitm_port||'?'}</div></td>
       <td><button class="btn btn-sm btn-blue" onclick="openClient('${esc(g.name)}')">+ Client</button>
+        <button class="btn btn-sm" title="Copy public user link" onclick="copyUserLink('${esc(g.name)}')">🔗 Link</button>
+        ${mitmBtn}
         <button class="btn btn-sm" onclick="toggleGw('${esc(g.name)}',${running})">${running?'Stop':'Start'}</button>
         <button class="btn btn-sm" onclick="restartGw('${esc(g.name)}')">Restart</button>
         <button class="btn btn-sm btn-red" onclick="deleteGw('${esc(g.name)}')">Delete</button></td></tr>`;
@@ -132,7 +149,21 @@ async function createGateway(){const name=document.getElementById('gw-name').val
 async function deleteGw(name){if(!confirm(`Delete "${name}"?`))return;try{await fetchApi(`/api/gateways/${encodeURIComponent(name)}`,{method:'DELETE'});toast('Deleted');loadGateways();}catch(e){toast(e.message,true);}}
 async function toggleGw(name,running){const a=running?'stop':'start';try{await fetchApi(`/api/gateways/${encodeURIComponent(name)}/${a}`,{method:'POST'});toast(a+'ped');setTimeout(loadGateways,2000);}catch(e){toast(e.message,true);}}
 async function restartGw(name){try{await fetchApi(`/api/gateways/${encodeURIComponent(name)}/restart`,{method:'POST'});toast('Restarted');setTimeout(loadGateways,2000);}catch(e){toast(e.message,true);}}
+async function toggleMitm(name,active){
+  const action = active ? 'stop' : 'start';
+  if (!active && !confirm('Start MITM for "'+name+'"?\n\nClients on this gateway will need the CA cert installed (download from Captures page).\nAll TCP 80/443 traffic will be intercepted and logged.')) return;
+  try {
+    await fetchApi(`/api/gateways/${encodeURIComponent(name)}/mitm/${action}`, { method:'POST' });
+    toast('MITM ' + (action==='start'?'started':'stopped'));
+    setTimeout(loadGateways, 1500);
+  } catch(e) { toast(e.message, true); }
+}
 async function retest(name){try{const d=await fetchApi(`/api/gateways/${encodeURIComponent(name)}/test`,{method:'POST'});toast('Exit IP: '+d.exit_ip);loadGateways();}catch(e){toast(e.message,true);}}
+function copyUserLink(name){
+  const url = location.origin + '/g.html?name=' + encodeURIComponent(name);
+  navigator.clipboard.writeText(url).then(() => toast('Copied: ' + url)).catch(() => prompt('Public link cho user:', url));
+  window.open(url, '_blank');
+}
 function openClient(name){_cmGw=name;document.getElementById('cm-gw').textContent=name;document.getElementById('cm-name').value='';document.getElementById('cm-result').style.display='none';document.getElementById('client-modal').classList.add('open');document.getElementById('cm-name').focus();}
 async function createClient(){const cn=document.getElementById('cm-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');if(!cn)return toast('Enter a client name',true);
   const btn=document.querySelector('[onclick="createClient()"]');btn.textContent='Generating...';btn.disabled=true;

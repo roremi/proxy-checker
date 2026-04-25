@@ -1,0 +1,23 @@
+[Unit]
+Description=Per-gateway DNS resolver for VPN gateway %i
+After=network.target dnsproxy@%i.service
+Wants=dnsproxy@%i.service
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/openvpn/gateways/%i/dnsmasq-gw.env
+ExecStart=/bin/bash -lc 'exec /usr/sbin/dnsmasq --no-daemon \
+  --listen-address="$VPN_GW_IP" \
+  --port=53 \
+  --bind-dynamic \
+  --no-resolv \
+  --no-hosts \
+  --strict-order \
+  --cache-size=500 \
+  --server=127.0.0.1#"$DNS_PORT" \
+  ${DNS_FALLBACK:+--server="$DNS_FALLBACK"}'
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

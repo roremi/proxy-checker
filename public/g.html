@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gateway tự phục vụ</title>
+<style>
+  :root {
+    --bg:#0f1115; --surface:#171a21; --surface2:#222730; --surface3:#2c323d;
+    --text:#e8eaed; --dim:#9aa0a6; --muted:#6b7280;
+    --blue:#4f8cff; --green:#34c759; --orange:#ff9500; --red:#ff3b30; --purple:#bf5af2;
+    --border:#2a2f3a;
+  }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif }
+  .wrap { max-width:1100px; margin:0 auto; padding:20px }
+  h1 { margin:0 0 4px; font-size:22px }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:18px }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:16px }
+  .card h2 { margin:0 0 12px; font-size:16px; display:flex; align-items:center; gap:8px }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px }
+  .kv { background:var(--surface2); padding:10px 12px; border-radius:6px }
+  .kv .k { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.5px }
+  .kv .v { font-size:14px; margin-top:2px; font-family:ui-monospace,monospace; word-break:break-all }
+  button, .btn { background:var(--blue); color:#fff; border:0; padding:9px 16px; border-radius:6px; cursor:pointer; font-size:13px; text-decoration:none; display:inline-block }
+  button:hover, .btn:hover { filter:brightness(1.1) }
+  button.green { background:var(--green) }
+  button.orange { background:var(--orange) }
+  button.purple { background:var(--purple) }
+  button.ghost { background:var(--surface3); color:var(--text) }
+  button:disabled { opacity:.5; cursor:not-allowed }
+  input { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px 10px; border-radius:6px; font-size:13px }
+  input:focus { outline:1px solid var(--blue); border-color:var(--blue) }
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600 }
+  .badge.on { background:var(--green); color:#fff }
+  .badge.off { background:var(--surface3); color:var(--dim) }
+  .badge.warn { background:var(--orange); color:#fff }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px }
+  .tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin-bottom:14px }
+  .tab { padding:10px 16px; cursor:pointer; color:var(--dim); border-bottom:2px solid transparent }
+  .tab.active { color:var(--blue); border-bottom-color:var(--blue) }
+  .tab-pane { display:none } .tab-pane.active { display:block }
+  details { background:var(--surface2); border-radius:6px; margin-bottom:8px; padding:8px 12px }
+  details summary { cursor:pointer; font-weight:600 }
+  details[open] summary { margin-bottom:8px }
+  pre { background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:10px; overflow-x:auto; font-size:12px; margin:6px 0 }
+  code { background:var(--surface2); padding:1px 6px; border-radius:3px; font-size:12px }
+  .alert { padding:10px 14px; border-radius:6px; margin-bottom:12px; font-size:13px }
+  .alert.warn { background:#3a2a14; border:1px solid var(--orange); color:#ffcc88 }
+  .alert.info { background:#15263a; border:1px solid var(--blue); color:#a8c8ff }
+  table { width:100%; border-collapse:collapse; font-size:12px }
+  th, td { padding:6px 8px; text-align:left; border-bottom:1px solid var(--border) }
+  th { color:var(--dim); font-size:11px; text-transform:uppercase }
+  tr:hover td { background:var(--surface2); cursor:pointer }
+  .method { padding:2px 6px; border-radius:3px; font-weight:600; font-size:11px }
+  .method.GET { background:#1e3a5f; color:#7bb3ff }
+  .method.POST { background:#1e4d2b; color:#7bd591 }
+  .method.PUT { background:#5f4a1e; color:#ffd070 }
+  .method.DELETE { background:#5f1e1e; color:#ff8b8b }
+  .method.PATCH { background:#3d1e5f; color:#c98bff }
+  .status-2xx { color:var(--green) } .status-3xx { color:var(--blue) }
+  .status-4xx { color:var(--orange) } .status-5xx { color:var(--red) }
+  #captures-list { max-height:480px; overflow-y:auto }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--red); display:inline-block; margin-right:6px }
+  .live-dot.on { background:var(--green); box-shadow:0 0 6px var(--green) }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Gateway</h1>
+  <div class="sub" id="subtitle">Trang tự phục vụ — không cần đăng nhập</div>
+
+  <div id="not-found" class="alert warn" style="display:none">
+    Không tìm thấy gateway. Hãy chắc rằng URL có dạng <code>/g.html?name=&lt;tên&gt;</code>.
+  </div>
+
+  <!-- STATUS -->
+  <div class="card" id="status-card" style="display:none">
+    <h2>📡 Trạng thái <span id="status-badge"></span></h2>
+    <div class="grid" id="status-grid"></div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs" id="tabs" style="display:none">
+    <div class="tab active" data-tab="install">📥 Cài VPN</div>
+    <div class="tab" data-tab="ca">🔐 Cài CA (cho HTTPS)</div>
+    <div class="tab" data-tab="mitm">🎯 Bật/tắt MITM</div>
+    <div class="tab" data-tab="captures">📊 Captures realtime</div>
+    <div class="tab" data-tab="analyze">🧠 Phân tích (AI)</div>
+  </div>
+
+  <!-- TAB: INSTALL OVPN -->
+  <div class="tab-pane active" id="tab-install">
+    <div class="card">
+      <h2>1. Tải file cấu hình OpenVPN</h2>
+      <div class="alert info">
+        File <code>.ovpn</code> chứa chứng chỉ và cấu hình để client kết nối tới gateway. Mỗi user nên dùng tên riêng để dễ quản lý.
+      </div>
+      <div class="row">
+        <input id="cn-name" placeholder="tên thiết bị (vd: laptop, phone)" style="flex:1; min-width:200px">
+        <button id="btn-ovpn">Tạo & tải .ovpn</button>
+      </div>
+      <div id="ovpn-status" style="margin-top:8px; font-size:12px; color:var(--dim)"></div>
+    </div>
+
+    <div class="card">
+      <h2>2. Cài client OpenVPN</h2>
+      <details open><summary>Windows</summary>
+        <ol>
+          <li>Tải <a href="https://openvpn.net/community-downloads/" target="_blank" style="color:var(--blue)">OpenVPN Connect</a> hoặc <a href="https://openvpn.net/community-downloads/" target="_blank" style="color:var(--blue)">OpenVPN GUI</a>.</li>
+          <li>Mở app → import file <code>.ovpn</code> vừa tải.</li>
+          <li>Bấm Connect.</li>
+        </ol>
+      </details>
+      <details><summary>macOS</summary>
+        <ol>
+          <li>Cài <a href="https://tunnelblick.net/" target="_blank" style="color:var(--blue)">Tunnelblick</a> (miễn phí).</li>
+          <li>Double-click file <code>.ovpn</code> → Tunnelblick sẽ import.</li>
+          <li>Click icon Tunnelblick trên thanh menu → Connect.</li>
+        </ol>
+      </details>
+      <details><summary>Android</summary>
+        <ol>
+          <li>Cài <b>OpenVPN for Android</b> (F-Droid) hoặc <b>OpenVPN Connect</b> (Play Store).</li>
+          <li>Mở app → Import → chọn file <code>.ovpn</code>.</li>
+          <li>Bấm dấu kết nối.</li>
+        </ol>
+      </details>
+      <details><summary>iOS</summary>
+        <ol>
+          <li>Cài <b>OpenVPN Connect</b> trên App Store.</li>
+          <li>Gửi file <code>.ovpn</code> qua AirDrop / iCloud / Mail rồi mở bằng OpenVPN.</li>
+          <li>Bấm Add → Connect.</li>
+        </ol>
+      </details>
+      <details><summary>Linux (CLI)</summary>
+        <pre>sudo apt install openvpn
+sudo openvpn --config &lt;file&gt;.ovpn</pre>
+      </details>
+    </div>
+  </div>
+
+  <!-- TAB: CA CERT -->
+  <div class="tab-pane" id="tab-ca">
+    <div class="card">
+      <h2>Khi nào cần cài CA?</h2>
+      <div class="alert info">
+        <b>Chỉ cần nếu bạn bật MITM</b> để soi traffic HTTPS. Nếu MITM tắt, traffic chạy thẳng qua proxy upstream và không cần cài gì thêm.
+      </div>
+      <div class="row">
+        <a class="btn green" href="/api/mitm/cert.pem" download>⬇ Tải CA (.pem)</a>
+        <a class="btn green" href="/api/mitm/cert.cer" download>⬇ Tải CA (.cer)</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Hướng dẫn cài CA</h2>
+      <details open><summary>Windows (toàn hệ thống)</summary>
+        <ol>
+          <li>Tải file <code>.cer</code> ở trên.</li>
+          <li>Double-click → <b>Install Certificate</b> → <b>Local Machine</b> → Next.</li>
+          <li>Chọn <b>Place all certificates in the following store</b> → Browse → <b>Trusted Root Certification Authorities</b> → OK → Next → Finish.</li>
+          <li>Có thể cần restart trình duyệt.</li>
+        </ol>
+      </details>
+      <details><summary>macOS (Keychain)</summary>
+        <ol>
+          <li>Tải file <code>.pem</code>.</li>
+          <li>Mở Keychain Access → File → Import Items → chọn file.</li>
+          <li>Trong tab "System", tìm <code>mitmproxy</code> → double-click → <b>Trust</b> → "When using this certificate" → <b>Always Trust</b>.</li>
+          <li>Đóng popup, nhập mật khẩu admin.</li>
+        </ol>
+      </details>
+      <details><summary>Android</summary>
+        <div class="alert warn">Android 7+ chỉ tin user-CA cho app có cấu hình network-security-config. Nhiều app (Chrome, banking, ...) sẽ không tin user-CA — cần root để cài system-CA.</div>
+        <ol>
+          <li>Tải file <code>.cer</code>.</li>
+          <li>Settings → Security → Encryption & credentials → <b>Install a certificate</b> → CA certificate → chọn file.</li>
+          <li>Đặt tên (vd: "Proxy Checker MITM").</li>
+        </ol>
+      </details>
+      <details><summary>iOS / iPadOS</summary>
+        <ol>
+          <li>Tải file <code>.pem</code> trên Safari → cho phép profile được tải.</li>
+          <li>Settings → General → VPN & Device Management → Profile → tìm <b>mitmproxy</b> → Install.</li>
+          <li>Settings → General → About → <b>Certificate Trust Settings</b> → bật toggle cho <b>mitmproxy</b>.</li>
+        </ol>
+      </details>
+      <details><summary>Firefox (mọi OS)</summary>
+        <ol>
+          <li>about:preferences#privacy → cuộn xuống <b>Certificates</b> → View Certificates → Authorities → Import.</li>
+          <li>Chọn file <code>.pem</code> → tích "Trust this CA to identify websites".</li>
+        </ol>
+      </details>
+    </div>
+  </div>
+
+  <!-- TAB: MITM TOGGLE -->
+  <div class="tab-pane" id="tab-mitm">
+    <div class="card">
+      <h2>Bật/tắt giám sát traffic (MITM)</h2>
+      <div class="alert warn">
+        Khi bật MITM, traffic HTTPS sẽ được giải mã để xem payload. Client <b>phải cài CA cert</b> trước (xem tab CA), nếu không trình duyệt sẽ báo lỗi cert.
+      </div>
+      <div class="alert info">
+        Traffic vẫn đi qua proxy upstream (cùng IP exit) như bình thường — chỉ thêm bước decrypt ở giữa.
+      </div>
+      <div class="row" id="mitm-row">
+        <span>Trạng thái: <span id="mitm-state-badge" class="badge off">đang tải...</span></span>
+        <button id="btn-mitm-start" class="purple">▶ Bật MITM</button>
+        <button id="btn-mitm-stop" class="orange">■ Tắt MITM</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: CAPTURES -->
+  <div class="tab-pane" id="tab-captures">
+    <div class="card">
+      <h2 style="display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+        <span><span id="ws-dot" class="live-dot"></span>Captures</span>
+        <span id="ws-status" style="color:var(--dim); font-size:12px"></span>
+        <span id="cap-stats" style="color:var(--dim); font-size:12px; margin-left:auto"></span>
+      </h2>
+
+      <!-- Filter bar -->
+      <div class="row" style="gap:6px; margin-bottom:10px">
+        <input id="f-method" placeholder="Method (GET, POST...)" style="width:140px">
+        <input id="f-host" placeholder="Host contains..." style="width:200px">
+        <input id="f-path" placeholder="Path contains..." style="width:200px">
+        <input id="f-status-min" type="number" placeholder="Status ≥" style="width:90px">
+        <input id="f-status-max" type="number" placeholder="Status ≤" style="width:90px">
+        <input id="f-q" placeholder="URL/host search..." style="flex:1; min-width:160px">
+        <button class="btn" onclick="applyFilters()">🔍 Lọc</button>
+        <button class="ghost btn" onclick="clearFilters()">Xoá</button>
+        <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--dim); margin-left:8px">
+          <input type="checkbox" id="f-live" checked> realtime
+        </label>
+      </div>
+
+      <!-- Export bar -->
+      <div class="row" style="gap:6px; margin-bottom:10px">
+        <span style="color:var(--dim); font-size:12px; margin-right:6px">Xuất logs (theo filter hiện tại):</span>
+        <button class="btn green" onclick="exportLogs('ndjson')">⬇ NDJSON (full + body)</button>
+        <button class="btn green" onclick="exportLogs('har')">⬇ HAR (DevTools/Postman)</button>
+        <button class="btn green" onclick="exportLogs('csv')">⬇ CSV (summary)</button>
+        <button class="btn" style="background:var(--red); margin-left:auto" onclick="clearLogs()">🗑 Xóa tất cả logs</button>
+      </div>
+
+      <div id="captures-list">
+        <table>
+          <thead><tr><th>Time</th><th>Method</th><th>Status</th><th>Host</th><th>Path</th><th>Size</th><th>ms</th></tr></thead>
+          <tbody id="cap-tbody"><tr><td colspan="7" style="color:var(--dim); padding:20px; text-align:center">Chưa có capture nào.<br>Bật MITM, cài CA, rồi truy cập web để xem flows xuất hiện ở đây.</td></tr></tbody>
+        </table>
+      </div>
+      <div style="text-align:center; margin-top:10px">
+        <button class="ghost btn" id="btn-loadmore" onclick="loadMore()">⤓ Load thêm cũ hơn</button>
+        <span id="loaded-info" style="color:var(--dim); font-size:11px; margin-left:10px"></span>
+      </div>
+    </div>
+
+    <div class="card" id="cap-detail-card" style="display:none">
+      <h2>Chi tiết flow <button class="ghost" style="float:right; padding:3px 10px" onclick="document.getElementById('cap-detail-card').style.display='none'">✕</button></h2>
+      <div id="cap-detail"></div>
+    </div>
+  </div>
+
+  <!-- TAB: ANALYZE -->
+  <div class="tab-pane" id="tab-analyze">
+    <div class="card">
+      <h2>🧠 Phân tích hệ thống đang theo dõi / thu thập gì</h2>
+      <div class="alert info">
+        Quét toàn bộ flows đã capture và phát hiện: tracker SDK (AppsFlyer, ThreatMetrix, Sift...), header fingerprint, body field PII, risk endpoint (step-up auth, captcha), mâu thuẫn geo/locale.
+        <br>· <b>Rule-based</b> chạy miễn phí offline. <b>AI</b> cần set <code>LLM_API_KEY</code> trên server (OpenAI/Groq/OpenRouter).
+      </div>
+      <div class="row">
+        <label style="color:var(--dim); font-size:12px">Window:</label>
+        <select id="an-window" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:6px">
+          <option value="15">15 phút</option>
+          <option value="60" selected>1 giờ</option>
+          <option value="360">6 giờ</option>
+          <option value="1440">24 giờ</option>
+        </select>
+        <button class="btn" onclick="runAnalyze()">🔍 Quét rule-based</button>
+        <button class="btn purple" id="btn-ai" onclick="runAI()">✨ Phân tích AI</button>
+        <span id="ai-status" style="color:var(--dim); font-size:12px"></span>
+      </div>
+    </div>
+
+    <div class="card" id="an-summary-card" style="display:none">
+      <h2>📊 Tóm tắt</h2>
+      <div id="an-summary"></div>
+    </div>
+
+    <div class="card" id="an-trackers-card" style="display:none">
+      <h2>🎯 Tracker / SDK / fraud engine phát hiện</h2>
+      <div id="an-trackers"></div>
+    </div>
+
+    <div class="card" id="an-fp-card" style="display:none">
+      <h2>🔑 Fingerprint headers + body fields</h2>
+      <div id="an-fp"></div>
+    </div>
+
+    <div class="card" id="an-risk-card" style="display:none">
+      <h2>⚠️ Risk endpoints + auth chain</h2>
+      <div id="an-risk"></div>
+    </div>
+
+    <div class="card" id="an-geo-card" style="display:none">
+      <h2>🌏 Geo / Locale signals</h2>
+      <div id="an-geo"></div>
+    </div>
+
+    <div class="card" id="an-ai-card" style="display:none">
+      <h2>✨ Kết luận AI</h2>
+      <div id="an-ai"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const NAME = (params.get('name') || '').replace(/[^a-zA-Z0-9_-]/g,'');
+let info = null;
+let ws = null;
+
+if (!NAME) {
+  document.getElementById('not-found').style.display='block';
+} else {
+  document.getElementById('title').textContent = `Gateway: ${NAME}`;
+  loadInfo();
+  setInterval(loadInfo, 10000);
+}
+
+async function loadInfo() {
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/info`);
+    if (r.status === 404) {
+      document.getElementById('not-found').style.display='block';
+      return;
+    }
+    info = await r.json();
+    renderStatus();
+    document.getElementById('status-card').style.display='block';
+    document.getElementById('tabs').style.display='flex';
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function renderStatus() {
+  const badge = info.running
+    ? '<span class="badge on">● online</span>'
+    : '<span class="badge off">● offline</span>';
+  document.getElementById('status-badge').innerHTML = badge;
+  const items = [
+    ['Quốc gia', info.country || '-'],
+    ['Exit IP', info.exit_ip || '-'],
+    ['Server VPN', `${info.server_ip}:${info.vpn_port}`],
+    ['Subnet', info.vpn_subnet || '-'],
+    ['OpenVPN', info.vpn_running ? '✅ chạy' : '❌ dừng'],
+    ['Tun2Socks', info.tun_running ? '✅ chạy' : '❌ dừng'],
+    ['MITM', info.mitm_running ? `✅ chạy (port ${info.mitm_port})` : (info.mitm_port ? `⚪ tắt (port ${info.mitm_port})` : '— chưa cấu hình')],
+    ['Số client đã tạo', info.client_count || 0],
+  ];
+  document.getElementById('status-grid').innerHTML = items.map(([k,v]) =>
+    `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`
+  ).join('');
+
+  // mitm tab
+  const mb = document.getElementById('mitm-state-badge');
+  if (info.mitm_running) { mb.className='badge on'; mb.textContent='● ĐANG BẬT'; }
+  else if (info.mitm_port) { mb.className='badge off'; mb.textContent='○ đang tắt'; }
+  else { mb.className='badge warn'; mb.textContent='⚠ chưa cấu hình'; }
+  document.getElementById('btn-mitm-start').disabled = info.mitm_running || !info.mitm_port;
+  document.getElementById('btn-mitm-stop').disabled = !info.mitm_running;
+}
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+}));
+
+// Download .ovpn
+document.getElementById('btn-ovpn').addEventListener('click', async () => {
+  const cn = document.getElementById('cn-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  if (!cn) { alert('Nhập tên thiết bị'); return; }
+  const status = document.getElementById('ovpn-status');
+  status.textContent = 'Đang tạo certificate...';
+  document.getElementById('btn-ovpn').disabled = true;
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/client`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ client_name: cn })
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(()=>({error:r.statusText}));
+      throw new Error(j.error || 'failed');
+    }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${NAME}-${cn}.ovpn`;
+    document.body.appendChild(a); a.click(); a.remove();
+    status.textContent = `✅ Đã tải ${NAME}-${cn}.ovpn`;
+    loadInfo();
+  } catch(e) {
+    status.textContent = '❌ Lỗi: ' + e.message;
+  } finally {
+    document.getElementById('btn-ovpn').disabled = false;
+  }
+});
+
+// MITM toggle
+async function toggleMitm(action) {
+  if (action === 'start' && !confirm('Bật MITM sẽ giải mã HTTPS. Client chưa cài CA sẽ báo lỗi cert. Tiếp tục?')) return;
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/mitm/${action}`, { method:'POST' });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'failed');
+    loadInfo();
+  } catch(e) { alert('Lỗi: ' + e.message); }
+}
+document.getElementById('btn-mitm-start').addEventListener('click', () => toggleMitm('start'));
+document.getElementById('btn-mitm-stop').addEventListener('click', () => toggleMitm('stop'));
+
+// ─── Captures: filter + REST + WS + pagination ───
+const filters = { method:'', host_like:'', path_like:'', status_min:'', status_max:'', q:'' };
+const flowsMap = new Map();   // id -> flow summary (oldest .. newest order maintained by ts)
+let oldestTs = null;
+let totalMatched = 0;
+let liveMode = true;
+
+function readFiltersFromUI() {
+  filters.method     = document.getElementById('f-method').value.trim().toUpperCase();
+  filters.host_like  = document.getElementById('f-host').value.trim();
+  filters.path_like  = document.getElementById('f-path').value.trim();
+  filters.status_min = document.getElementById('f-status-min').value.trim();
+  filters.status_max = document.getElementById('f-status-max').value.trim();
+  filters.q          = document.getElementById('f-q').value.trim();
+  liveMode           = document.getElementById('f-live').checked;
+}
+function filterQuery() {
+  const u = new URLSearchParams();
+  for (const [k,v] of Object.entries(filters)) if (v) u.set(k, v);
+  return u;
+}
+function clearFilters() {
+  ['f-method','f-host','f-path','f-status-min','f-status-max','f-q'].forEach(id => document.getElementById(id).value = '');
+  applyFilters();
+}
+async function applyFilters() {
+  readFiltersFromUI();
+  flowsMap.clear();
+  oldestTs = null;
+  await loadPage(true);
+}
+async function loadPage(reset) {
+  const u = filterQuery();
+  u.set('limit', '300');
+  if (!reset && oldestTs) u.set('before_ts', String(oldestTs));
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/captures?${u}`);
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    totalMatched = d.total || 0;
+    for (const f of (d.flows || [])) {
+      flowsMap.set(f.id, f);
+      if (oldestTs == null || f.ts < oldestTs) oldestTs = f.ts;
+    }
+    renderTable();
+    document.getElementById('loaded-info').textContent =
+      `Đang hiển thị ${flowsMap.size} / ${totalMatched} flows khớp filter`;
+    document.getElementById('btn-loadmore').style.display = (flowsMap.size < totalMatched) ? 'inline-block' : 'none';
+  } catch(e) { console.error('loadPage', e); }
+}
+function loadMore() { loadPage(false); }
+
+function flowMatchesFilter(f) {
+  if (filters.method && f.method !== filters.method) return false;
+  if (filters.host_like && !(f.host || '').toLowerCase().includes(filters.host_like.toLowerCase())) return false;
+  if (filters.path_like && !(f.path || '').toLowerCase().includes(filters.path_like.toLowerCase())) return false;
+  if (filters.status_min && (f.status || 0) < parseInt(filters.status_min,10)) return false;
+  if (filters.status_max && (f.status || 0) > parseInt(filters.status_max,10)) return false;
+  if (filters.q) {
+    const q = filters.q.toLowerCase();
+    if (!((f.url||'').toLowerCase().includes(q) || (f.host||'').toLowerCase().includes(q))) return false;
+  }
+  return true;
+}
+
+function renderTable() {
+  const tb = document.getElementById('cap-tbody');
+  // newest first
+  const arr = [...flowsMap.values()].sort((a,b) => b.ts - a.ts);
+  if (!arr.length) {
+    tb.innerHTML = '<tr><td colspan="7" style="color:var(--dim); padding:20px; text-align:center">Không có flow nào khớp.</td></tr>';
+    return;
+  }
+  tb.innerHTML = '';
+  for (const f of arr) tb.appendChild(makeRow(f));
+}
+function makeRow(f) {
+  const tr = document.createElement('tr');
+  tr.dataset.id = f.id;
+  const sc = f.status >= 500 ? 'status-5xx' : f.status >= 400 ? 'status-4xx' : f.status >= 300 ? 'status-3xx' : 'status-2xx';
+  const t = new Date(f.ts).toLocaleTimeString();
+  tr.innerHTML = `
+    <td>${t}</td>
+    <td><span class="method ${f.method}">${f.method}</span></td>
+    <td class="${sc}">${f.status || '-'}</td>
+    <td>${escapeHtml(f.host || '')}</td>
+    <td style="font-family:ui-monospace,monospace; font-size:11px; max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${escapeHtml(f.path || '')}</td>
+    <td>${fmtSize(f.res_size)}</td>
+    <td>${f.elapsed_ms || '-'}</td>`;
+  tr.addEventListener('click', () => showDetail(f.id));
+  return tr;
+}
+function fmtSize(n) {
+  if (!n) return '-';
+  if (n < 1024) return n + 'B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + 'K';
+  return (n/1024/1024).toFixed(1) + 'M';
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+}
+
+function exportLogs(format) {
+  const u = filterQuery();
+  u.set('limit', format === 'ndjson' ? '100000' : (format === 'har' ? '10000' : '50000'));
+  const url = `/api/public/g/${NAME}/export.${format}?${u}`;
+  window.location.href = url;   // browser will download
+}
+
+async function clearLogs() {
+  if (!confirm('Xóa TOÀN BỘ logs của gateway "' + NAME + '"?\nKhông thể khôi phục.')) return;
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/captures`, { method:'DELETE' });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+    // Reset UI state
+    flowsMap.clear();
+    oldestTs = null;
+    totalMatched = 0;
+    renderTable();
+    document.getElementById('loaded-info').textContent = '';
+    document.getElementById('btn-loadmore').style.display = 'none';
+    refreshStats();
+    alert('Đã xóa ' + (j.deleted || 0) + ' flows');
+  } catch(e) { alert('Lỗi xóa: ' + e.message); }
+}
+
+async function refreshStats() {
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/stats`);
+    if (!r.ok) return;
+    const s = await r.json();
+    const h = s.last_1h || {};
+    document.getElementById('cap-stats').textContent =
+      `1h: ${h.n||0} flows, ${fmtSize(h.bytes||0)}, ${h.err||0} lỗi  •  Tổng: ${s.total||0}`;
+  } catch(_){}
+}
+
+async function showDetail(id) {
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/captures/${encodeURIComponent(id)}`);
+    if (!r.ok) { alert('Detail not found (id='+id+')'); return; }
+    const f = await r.json();
+    const card = document.getElementById('cap-detail-card');
+    const body = document.getElementById('cap-detail');
+    body.innerHTML = `
+      <pre>${escapeHtml(f.method + ' ' + f.url + '  →  ' + f.status + '   (' + (f.elapsed_ms||0) + 'ms)')}</pre>
+      <details open><summary>Request headers</summary><pre>${escapeHtml(JSON.stringify(f.req_headers, null, 2))}</pre></details>
+      <details><summary>Request body (${f.req_size}B${f.req_truncated?', truncated':''})</summary><pre>${escapeHtml(decodeBody(f.req_body_b64))}</pre></details>
+      <details open><summary>Response headers</summary><pre>${escapeHtml(JSON.stringify(f.res_headers, null, 2))}</pre></details>
+      <details open><summary>Response body (${f.res_size}B${f.res_truncated?', truncated':''})</summary><pre>${escapeHtml(decodeBody(f.res_body_b64))}</pre></details>
+      <div style="text-align:right; margin-top:8px">
+        <button class="ghost btn" onclick="copyDetail('${f.id}')">📋 Copy JSON</button>
+      </div>
+    `;
+    card.style.display = 'block';
+    card.scrollIntoView({behavior:'smooth', block:'nearest'});
+  } catch(e){ console.error(e); }
+}
+async function copyDetail(id) {
+  const r = await fetch(`/api/public/g/${NAME}/captures/${encodeURIComponent(id)}`);
+  if (!r.ok) return;
+  const text = await r.text();
+  navigator.clipboard.writeText(text).then(() => alert('Đã copy JSON đầy đủ'));
+}
+function decodeBody(b64) {
+  if (!b64) return '(empty)';
+  try {
+    // atob → bytes → UTF-8 decode (atob alone breaks multi-byte chars)
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    let txt;
+    try { txt = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch(_) {
+      // not valid UTF-8 → likely still-compressed or true binary
+      // Heuristic: if first 2 bytes are gzip magic 0x1f 0x8b → tell user
+      if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+        return '(binary: gzip-compressed, ' + bytes.length + ' bytes — restart MITM to fix decoding)';
+      }
+      if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50) return '(binary: PNG image, ' + bytes.length + ' bytes)';
+      if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8) return '(binary: JPEG image, ' + bytes.length + ' bytes)';
+      return '(binary, ' + bytes.length + ' bytes — không phải text)';
+    }
+    try { return JSON.stringify(JSON.parse(txt), null, 2); } catch(_) { return txt; }
+  } catch(_) { return '(decode error)'; }
+}
+
+// WebSocket realtime
+function connectWs() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/g/${NAME}`);
+  const dot = document.getElementById('ws-dot');
+  const stat = document.getElementById('ws-status');
+  ws.onopen = () => { dot.classList.add('on'); stat.textContent = 'live'; };
+  ws.onclose = () => {
+    dot.classList.remove('on'); stat.textContent = 'mất kết nối, đang thử lại...';
+    ws = null; setTimeout(connectWs, 3000);
+  };
+  ws.onerror = () => { stat.textContent = 'lỗi WS'; };
+  ws.onmessage = (ev) => {
+    try {
+      const m = JSON.parse(ev.data);
+      if (m.type === 'hello') {
+        // Initial recent — only fill if user hasn't loaded a filtered page
+        if (flowsMap.size === 0) {
+          for (const f of (m.recent || [])) {
+            if (flowMatchesFilter(f)) flowsMap.set(f.id, f);
+            if (oldestTs == null || f.ts < oldestTs) oldestTs = f.ts;
+          }
+          totalMatched = Math.max(totalMatched, flowsMap.size);
+          renderTable();
+          document.getElementById('loaded-info').textContent = `Hiển thị ${flowsMap.size} flows mới nhất`;
+        }
+      } else if (m.type === 'flow') {
+        if (!liveMode) return;
+        const f = m.flow;
+        if (!flowMatchesFilter(f)) return;
+        flowsMap.set(f.id, f);
+        totalMatched++;
+        renderTable();
+        refreshStats();
+      }
+    } catch(_){}
+  };
+}
+
+setInterval(refreshStats, 5000);
+if (NAME) {
+  refreshStats();
+  loadPage(true);  // initial load
+  connectWs();
+  initAnalyze();
+}
+
+// ─── Analyzer (rule-based + AI) ───
+async function initAnalyze() {
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/analyze/info`);
+    const j = await r.json();
+    const btn = document.getElementById('btn-ai');
+    if (!j.ai_available) {
+      btn.disabled = true;
+      btn.title = 'Server chưa cấu hình LLM_API_KEY';
+      document.getElementById('ai-status').textContent = '(AI tắt — cần LLM_API_KEY trên server)';
+    } else {
+      document.getElementById('ai-status').textContent = `(AI: ${j.ai_model})`;
+    }
+  } catch(_){}
+}
+
+function renderKVList(obj) {
+  if (!obj || !Object.keys(obj).length) return '<i style="color:var(--dim)">—</i>';
+  return Object.entries(obj).map(([k,v]) =>
+    `<div class="kv"><div class="k">${escapeHtml(k)}</div><div class="v">${escapeHtml(String(v))}</div></div>`
+  ).join('');
+}
+
+async function runAnalyze() {
+  const win = document.getElementById('an-window').value;
+  document.getElementById('ai-status').textContent = 'đang quét...';
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/analyze?since_minutes=${win}`);
+    if (!r.ok) throw new Error(await r.text());
+    const rep = await r.json();
+    renderReport(rep);
+    document.getElementById('ai-status').textContent = `quét xong: ${rep.summary.total_flows} flows`;
+  } catch(e) {
+    document.getElementById('ai-status').textContent = 'lỗi: ' + e.message;
+  }
+}
+
+function renderReport(rep) {
+  // Summary card
+  const scoreColor = rep.risk_score >= 60 ? 'var(--red)' : rep.risk_score >= 30 ? 'var(--orange)' : 'var(--green)';
+  document.getElementById('an-summary').innerHTML = `
+    <div class="grid">
+      <div class="kv"><div class="k">Flows phân tích</div><div class="v">${rep.summary.total_flows}</div></div>
+      <div class="kv"><div class="k">Unique hosts</div><div class="v">${rep.summary.unique_hosts}</div></div>
+      <div class="kv"><div class="k">Lỗi (4xx/5xx)</div><div class="v">${rep.summary.errors}</div></div>
+      <div class="kv"><div class="k">Risk score</div><div class="v" style="color:${scoreColor}; font-size:18px; font-weight:700">${rep.risk_score}/100</div></div>
+    </div>
+    ${rep.risk_reasons.length ? '<div style="margin-top:10px"><b>Lý do:</b><ul>' + rep.risk_reasons.map(r => '<li>'+escapeHtml(r)+'</li>').join('') + '</ul></div>' : ''}
+    ${rep.advice.length ? '<div style="margin-top:6px"><b>Khuyến nghị nhanh:</b><ul>' + rep.advice.map(a => '<li>'+escapeHtml(a)+'</li>').join('') + '</ul></div>' : ''}
+  `;
+  document.getElementById('an-summary-card').style.display = 'block';
+
+  // Trackers
+  if (rep.trackers.length) {
+    document.getElementById('an-trackers').innerHTML = `
+      <table><thead><tr><th>Vendor</th><th>Loại</th><th>Hits</th><th>Hosts</th><th>Mô tả</th></tr></thead><tbody>
+        ${rep.trackers.map(t => `<tr>
+          <td><b>${escapeHtml(t.vendor)}</b></td>
+          <td><span class="badge ${t.category==='fraud'?'warn':'off'}">${t.category}</span></td>
+          <td>${t.hits}</td>
+          <td style="font-family:ui-monospace,monospace; font-size:11px">${t.hosts.map(escapeHtml).join('<br>')}</td>
+          <td style="font-size:12px">${escapeHtml(t.what)}</td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    document.getElementById('an-trackers-card').style.display = 'block';
+  } else document.getElementById('an-trackers-card').style.display = 'none';
+
+  // Fingerprint
+  let fpHTML = '';
+  if (rep.fp_headers.length) {
+    fpHTML += '<h3 style="margin:0 0 6px; font-size:13px; color:var(--dim)">Headers</h3><table><thead><tr><th>Header</th><th>Đếm</th><th>Ý nghĩa</th><th>Sample value</th></tr></thead><tbody>'
+      + rep.fp_headers.map(h => `<tr><td><code>${escapeHtml(h.header)}</code></td><td>${h.count}</td><td style="font-size:12px">${escapeHtml(h.why)}</td><td style="font-family:ui-monospace,monospace; font-size:11px; max-width:300px; overflow:hidden; text-overflow:ellipsis">${escapeHtml((h.sample_value||'').slice(0,80))}</td></tr>`).join('')
+      + '</tbody></table>';
+  }
+  if (rep.fp_body_fields.length) {
+    fpHTML += '<h3 style="margin:14px 0 6px; font-size:13px; color:var(--dim)">Body fields (PII trong request body)</h3><table><thead><tr><th>Field</th><th>Đếm</th><th>Sample</th><th>Host</th></tr></thead><tbody>'
+      + rep.fp_body_fields.map(f => `<tr><td><code>${escapeHtml(f.field)}</code></td><td>${f.count}</td><td style="font-family:ui-monospace,monospace; font-size:11px">${escapeHtml(f.sample_value||'')}</td><td>${escapeHtml(f.sample_host||'')}</td></tr>`).join('')
+      + '</tbody></table>';
+  }
+  if (rep.cookies_set && rep.cookies_set.length) {
+    fpHTML += '<h3 style="margin:14px 0 6px; font-size:13px; color:var(--dim)">Cookies set</h3><div class="grid">'
+      + rep.cookies_set.map(c => `<div class="kv"><div class="k">${escapeHtml(c.name)} (${escapeHtml(c.host)})</div><div class="v" style="font-size:11px">${escapeHtml(c.sample)}</div></div>`).join('')
+      + '</div>';
+  }
+  if (rep.jwt_tokens && rep.jwt_tokens.length) {
+    fpHTML += '<h3 style="margin:14px 0 6px; font-size:13px; color:var(--dim)">JWT decoded (Authorization / device-signature)</h3>'
+      + rep.jwt_tokens.map(j => `<details><summary>${escapeHtml(j.host)} → ${escapeHtml(j.header)}</summary><pre>${escapeHtml(JSON.stringify(j.payload, null, 2))}</pre></details>`).join('');
+  }
+  if (fpHTML) {
+    document.getElementById('an-fp').innerHTML = fpHTML;
+    document.getElementById('an-fp-card').style.display = 'block';
+  } else document.getElementById('an-fp-card').style.display = 'none';
+
+  // Risk endpoints + auth chain
+  let riskHTML = '';
+  if (rep.risk_endpoints.length) {
+    riskHTML += '<h3 style="margin:0 0 6px; font-size:13px; color:var(--dim)">Risk / fraud / challenge endpoints</h3><table><thead><tr><th>Host</th><th>Path</th><th>Status</th><th>Lý do</th></tr></thead><tbody>'
+      + rep.risk_endpoints.map(r => `<tr><td>${escapeHtml(r.host)}</td><td style="font-family:ui-monospace,monospace; font-size:11px">${escapeHtml(r.path)}</td><td class="status-${Math.floor((r.status||0)/100)}xx">${r.status||'-'}</td><td style="font-size:12px">${escapeHtml(r.why)}</td></tr>`).join('')
+      + '</tbody></table>';
+  }
+  if (rep.auth_chain.length) {
+    riskHTML += '<h3 style="margin:14px 0 6px; font-size:13px; color:var(--dim)">Auth chain (theo thứ tự thời gian)</h3><table><thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Path</th><th>Status</th></tr></thead><tbody>'
+      + rep.auth_chain.map(a => `<tr><td>${new Date(a.ts).toLocaleTimeString()}</td><td><span class="method ${a.method}">${a.method}</span></td><td>${escapeHtml(a.host)}</td><td style="font-family:ui-monospace,monospace; font-size:11px">${escapeHtml(a.path)}</td><td class="status-${Math.floor((a.status||0)/100)}xx">${a.status||'-'}</td></tr>`).join('')
+      + '</tbody></table>';
+  }
+  if (riskHTML) {
+    document.getElementById('an-risk').innerHTML = riskHTML;
+    document.getElementById('an-risk-card').style.display = 'block';
+  } else document.getElementById('an-risk-card').style.display = 'none';
+
+  // Geo
+  const g = rep.geo_signals;
+  let geoHTML = '<div class="grid">'
+    + `<div class="kv"><div class="k">Timezones</div><div class="v">${escapeHtml(Object.keys(g.timezones).join(', ') || '—')}</div></div>`
+    + `<div class="kv"><div class="k">Locales</div><div class="v">${escapeHtml(Object.keys(g.locales).join(', ') || '—')}</div></div>`
+    + `<div class="kv"><div class="k">Country codes</div><div class="v">${escapeHtml(Object.keys(g.countries).join(', ') || '—')}</div></div>`
+    + `<div class="kv"><div class="k">Marketplaces / Currency</div><div class="v">${escapeHtml(Object.keys(g.marketplaces).join(', ') || '—')}</div></div>`
+    + '</div>';
+  if (rep.geo_mismatches.length) {
+    geoHTML += '<div class="alert warn" style="margin-top:10px"><b>⚠ Mâu thuẫn phát hiện:</b><ul>'
+      + rep.geo_mismatches.map(m => '<li>' + escapeHtml(m) + '</li>').join('')
+      + '</ul></div>';
+  } else {
+    geoHTML += '<div class="alert info" style="margin-top:10px">Không phát hiện mismatch geo/locale.</div>';
+  }
+  document.getElementById('an-geo').innerHTML = geoHTML;
+  document.getElementById('an-geo-card').style.display = 'block';
+}
+
+async function runAI() {
+  const win = document.getElementById('an-window').value;
+  const status = document.getElementById('ai-status');
+  status.textContent = 'AI đang phân tích... (có thể mất 5-30s)';
+  document.getElementById('btn-ai').disabled = true;
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/analyze/ai?since_minutes=${win}`, { method:'POST' });
+    const j = await r.json();
+    if (j.ai && j.ai.error) throw new Error(j.ai.error);
+    if (!j.ai || !j.ai.text) throw new Error('AI trả về rỗng');
+    document.getElementById('an-ai').innerHTML = `
+      <div style="color:var(--dim); font-size:11px; margin-bottom:8px">Model: ${escapeHtml(j.ai.model||'')} · Risk score rule-based: ${j.report_summary?.risk_score||0}/100</div>
+      <div style="background:var(--surface2); padding:14px; border-radius:6px; white-space:pre-wrap; line-height:1.6">${escapeHtml(j.ai.text)}</div>
+    `;
+    document.getElementById('an-ai-card').style.display = 'block';
+    status.textContent = 'AI xong';
+  } catch(e) {
+    status.textContent = 'AI lỗi: ' + e.message;
+  } finally {
+    document.getElementById('btn-ai').disabled = false;
+  }
+}
+</script>
+</body>
+</html>

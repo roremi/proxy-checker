@@ -1,0 +1,9 @@
+[Unit]
+Description=tun2socks health watchdog for gateway %i
+After=tun2socks@%i.service openvpn-server@%i.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tun2socks-watchdog %i
+StandardOutput=journal
+StandardError=journal

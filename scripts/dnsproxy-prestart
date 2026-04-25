@@ -1,0 +1,27 @@
+#!/bin/bash
+# Privileged pre-start hook for dnsproxy@<gw>.service.
+# Reads DNS_PORT from the gateway's env file and forcibly evicts any process
+# holding that port (covers orphans from deleted/recreated gateways and
+# instances of itself that didn't unbind cleanly during a restart).
+set -e
+NAME=$1
+[ -n "$NAME" ] || { echo "usage: dnsproxy-prestart <gateway>" >&2; exit 1; }
+ENV_FILE="/etc/openvpn/gateways/${NAME}/dnsproxy.env"
+[ -f "$ENV_FILE" ] || { echo "missing $ENV_FILE" >&2; exit 1; }
+P=$(grep -E '^DNS_PORT=' "$ENV_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'" | tr -d '[:space:]')
+[ -n "$P" ] || { echo "DNS_PORT empty for $NAME" >&2; exit 1; }
+
+fuser -k -TERM "$P/tcp" "$P/udp" 2>/dev/null || true
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  ss -lnt "sport = :$P" | grep -q ":$P" || break
+  sleep 0.3
+done
+if ss -lnt "sport = :$P" | grep -q ":$P"; then
+  fuser -k -KILL "$P/tcp" "$P/udp" 2>/dev/null || true
+  sleep 0.5
+fi
+if ss -lnt "sport = :$P" | grep -q ":$P"; then
+  echo "port $P still busy after fuser -KILL" >&2
+  exit 1
+fi
+exit 0
