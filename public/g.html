@@ -1007,10 +1007,15 @@ function renderReport(rep) {
 
 async function runAI() {
   const status = document.getElementById('ai-status');
-  status.textContent = 'AI đang phân tích... (5-60s tuỳ provider/model)';
+  const opts = getAIOpts();
+  if (!opts.model) {
+    status.textContent = '⚠ chưa chọn model — vào ⚙️ Cài đặt AI gõ tên model hoặc Refresh + chọn từ dropdown';
+    return;
+  }
+  status.textContent = `AI đang chạy với ${opts.provider} / ${opts.model}... (5-60s)`;
   document.getElementById('btn-ai').disabled = true;
   try {
-    const body = Object.assign(getScopeBody(), getAIOpts());
+    const body = Object.assign(getScopeBody(), opts);
     const r = await fetch(`/api/public/g/${NAME}/analyze/ai`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(body),
@@ -1021,16 +1026,16 @@ async function runAI() {
     const rs = j.report_summary || {};
     document.getElementById('an-ai').innerHTML = `
       <div style="color:var(--dim); font-size:11px; margin-bottom:8px">
-        Provider: <b>${escapeHtml(j.ai.provider||'')}</b> · Model: <b>${escapeHtml(j.ai.model||'')}</b>
+        Provider: <b>${escapeHtml(j.ai.provider||'')}</b> · Model thực dùng: <b style="color:var(--green)">${escapeHtml(j.ai.model||'')}</b>
         · Risk rule-based: ${rs.risk_score||0}/100
         · Flows: ${rs.flows_analyzed||0} · Apps: ${rs.unique_apps||0} · Domains: ${rs.unique_domains||0}
       </div>
       <div style="background:var(--surface2); padding:14px; border-radius:6px; white-space:pre-wrap; line-height:1.6">${escapeHtml(j.ai.text)}</div>
     `;
     document.getElementById('an-ai-card').style.display = 'block';
-    status.textContent = '✓ AI xong';
+    status.textContent = `✓ AI xong (${j.ai.model})`;
   } catch(e) {
-    status.textContent = 'AI lỗi: ' + e.message;
+    status.innerHTML = '<span style="color:var(--red)">AI lỗi (' + escapeHtml(opts.model) + '): ' + escapeHtml(e.message) + '</span>';
   } finally {
     document.getElementById('btn-ai').disabled = false;
   }

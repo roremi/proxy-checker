@@ -73,15 +73,24 @@ async function chat(opts) {
         headers['HTTP-Referer'] = opts.referer || 'http://localhost';
         headers['X-Title']      = opts.title   || 'proxy-checker analyzer';
       }
+      // GPT-5 / o1 / o3 / o4 reasoning families on OpenAI:
+      //   - reject `max_tokens`     → must use `max_completion_tokens`
+      //   - reject custom `temperature` (only default=1 supported)
+      const m = (c.model || '').toLowerCase();
+      const isReasoning = c.provider === 'openai' && /^(gpt-5|o1|o3|o4)/.test(m);
       const body = {
         model: c.model,
-        temperature,
-        max_tokens: maxTokens,
         messages: [
           { role: 'system', content: sys },
           { role: 'user',   content: user },
         ],
       };
+      if (isReasoning) {
+        body.max_completion_tokens = maxTokens;
+      } else {
+        body.max_tokens  = maxTokens;
+        body.temperature = temperature;
+      }
       const r = await fetchWithTimeout(c.baseURL + '/chat/completions', {
         method: 'POST', headers, body: JSON.stringify(body),
       }, c.timeoutMs);

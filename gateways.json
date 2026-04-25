@@ -20,7 +20,7 @@
     "mitm_uid": 994,
     "mitm_port": 18080,
     "mitm_enabled": true,
-    "client_count": 1,
+    "client_count": 2,
     "created_at": "2026-04-25T07:08:22.512Z",
     "last_tested": "2026-04-25T07:28:39.209Z"
   }
