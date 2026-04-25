@@ -269,26 +269,76 @@ sudo openvpn --config &lt;file&gt;.ovpn</pre>
     <div class="card">
       <h2>🧠 Phân tích hệ thống đang theo dõi / thu thập gì</h2>
       <div class="alert info">
-        Quét toàn bộ flows đã capture và phát hiện: tracker SDK (AppsFlyer, ThreatMetrix, Sift...), header fingerprint, body field PII, risk endpoint (step-up auth, captcha), mâu thuẫn geo/locale.
-        <br>· <b>Rule-based</b> chạy miễn phí offline. <b>AI</b> cần set <code>LLM_API_KEY</code> trên server (OpenAI/Groq/OpenRouter).
+        Quét toàn bộ flows đã capture và phát hiện: nhận dạng <b>app/nền tảng</b>, tracker SDK (AppsFlyer, ThreatMetrix, Sift, Stripe Radar, TikTok Pixel...), header fingerprint, body field PII, risk endpoint (step-up auth, captcha), mâu thuẫn geo/locale, breakdown theo <b>domain</b>.
+        <br>· <b>Rule-based</b> miễn phí offline. <b>AI</b> hỗ trợ <b>BYOK</b> (mang API key của bạn) hoặc <b>offline</b> (Ollama / LM Studio chạy trên máy bạn).
       </div>
-      <div class="row">
+      <div class="row" style="flex-wrap:wrap; gap:8px">
         <label style="color:var(--dim); font-size:12px">Window:</label>
         <select id="an-window" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:6px">
           <option value="15">15 phút</option>
           <option value="60" selected>1 giờ</option>
           <option value="360">6 giờ</option>
           <option value="1440">24 giờ</option>
+          <option value="10080">7 ngày</option>
         </select>
+        <input id="an-domain"  placeholder="Lọc domain (vd: ebay.com)" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:6px; min-width:160px">
+        <input id="an-keyword" placeholder="Từ khoá (url/path/body)" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:6px; min-width:180px">
+        <input id="an-app"     placeholder="App (vd: eBay, TikTok)" style="background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:8px; border-radius:6px; min-width:140px">
         <button class="btn" onclick="runAnalyze()">🔍 Quét rule-based</button>
         <button class="btn purple" id="btn-ai" onclick="runAI()">✨ Phân tích AI</button>
         <span id="ai-status" style="color:var(--dim); font-size:12px"></span>
       </div>
     </div>
 
+    <div class="card">
+      <h2 style="cursor:pointer" onclick="document.getElementById('ai-settings').style.display = document.getElementById('ai-settings').style.display==='none'?'block':'none'">⚙️ Cài đặt AI (BYOK / Offline) <span style="font-size:11px; color:var(--dim)">▼ click để mở/đóng</span></h2>
+      <div id="ai-settings" style="display:none">
+        <div class="alert info" style="font-size:12px">
+          Nhập API key <b>của bạn</b> — chỉ gửi 1 lần qua POST, server <b>KHÔNG lưu</b>. Lưu cục bộ trong trình duyệt (localStorage). Hỗ trợ cả <b>model offline</b> (Ollama, LM Studio chạy trên máy bạn — không cần internet, không tốn tiền).
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr; gap:10px">
+          <div class="kv"><div class="k">Provider</div><div class="v">
+            <select id="ai-provider" onchange="onProviderChange()" style="width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:6px; border-radius:4px"></select>
+          </div></div>
+          <div class="kv"><div class="k">API Key (BYOK) <span id="ai-key-hint" style="color:var(--dim); font-size:10px"></span></div><div class="v" style="display:flex; gap:4px">
+            <input id="ai-apikey" type="password" placeholder="sk-... hoặc bỏ trống cho Ollama/LM Studio" style="flex:1; background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:6px; border-radius:4px; font-family:ui-monospace,monospace">
+            <button class="ghost" type="button" onclick="(()=>{const e=document.getElementById('ai-apikey'); e.type=e.type==='password'?'text':'password';})()" style="padding:4px 10px">👁</button>
+          </div></div>
+          <div class="kv"><div class="k">Base URL <span style="color:var(--dim); font-size:10px">(override / openai-compat / lmstudio)</span></div><div class="v">
+            <input id="ai-baseurl" placeholder="https://... hoặc http://127.0.0.1:11434" style="width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:6px; border-radius:4px; font-family:ui-monospace,monospace">
+          </div></div>
+          <div class="kv"><div class="k">Model <button class="ghost" type="button" onclick="refreshModels()" style="padding:2px 8px; font-size:11px; margin-left:6px">🔄 Refresh</button></div><div class="v" style="display:flex; gap:4px">
+            <select id="ai-model-list" onchange="document.getElementById('ai-model').value=this.value" style="flex:1; background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:6px; border-radius:4px"><option value="">— refresh để load —</option></select>
+          </div></div>
+          <div class="kv" style="grid-column:1/-1"><div class="k">Model (manual override)</div><div class="v">
+            <input id="ai-model" placeholder="vd: gpt-4o, gpt-4.1, claude-3-5-sonnet-latest, gemini-2.0-flash, llama3.3:70b" style="width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:6px; border-radius:4px; font-family:ui-monospace,monospace">
+          </div></div>
+          <div class="kv" style="grid-column:1/-1"><div class="k">System prompt (tuỳ chọn — để trống dùng prompt mặc định ngữ cảnh fingerprint/tracker)</div><div class="v">
+            <textarea id="ai-system" rows="3" placeholder="Bạn là chuyên gia bảo mật..." style="width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); padding:6px; border-radius:4px; font-family:ui-monospace,monospace; font-size:12px"></textarea>
+          </div></div>
+        </div>
+        <div class="row" style="margin-top:10px; gap:8px">
+          <label style="color:var(--dim); font-size:12px"><input type="checkbox" id="ai-remember" checked> Lưu cài đặt vào trình duyệt (localStorage)</label>
+          <button class="btn" type="button" onclick="saveAISettings()">💾 Lưu</button>
+          <button class="ghost" type="button" onclick="clearAISettings()">🗑 Xoá khỏi máy</button>
+          <span id="ai-settings-status" style="color:var(--dim); font-size:12px"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="card" id="an-summary-card" style="display:none">
       <h2>📊 Tóm tắt</h2>
       <div id="an-summary"></div>
+    </div>
+
+    <div class="card" id="an-apps-card" style="display:none">
+      <h2>📱 App / nền tảng nhận dạng được</h2>
+      <div id="an-apps"></div>
+    </div>
+
+    <div class="card" id="an-domains-card" style="display:none">
+      <h2>🌐 Breakdown theo domain</h2>
+      <div id="an-domains"></div>
     </div>
 
     <div class="card" id="an-trackers-card" style="display:none">
@@ -663,20 +713,130 @@ if (NAME) {
   initAnalyze();
 }
 
-// ─── Analyzer (rule-based + AI) ───
+// ─── Analyzer (rule-based + multi-provider AI / BYOK / Offline) ───
+const AI_LS_KEY = 'pcAISettings';
+let AI_PROVIDERS = [];
+
+function loadAISettings() {
+  try { return JSON.parse(localStorage.getItem(AI_LS_KEY) || '{}'); } catch(_) { return {}; }
+}
+function saveAISettings() {
+  if (!document.getElementById('ai-remember').checked) {
+    localStorage.removeItem(AI_LS_KEY);
+    document.getElementById('ai-settings-status').textContent = 'không lưu (tắt remember)';
+    return;
+  }
+  const s = {
+    provider: document.getElementById('ai-provider').value,
+    apiKey:   document.getElementById('ai-apikey').value,
+    baseURL:  document.getElementById('ai-baseurl').value,
+    model:    document.getElementById('ai-model').value,
+    system:   document.getElementById('ai-system').value,
+  };
+  localStorage.setItem(AI_LS_KEY, JSON.stringify(s));
+  document.getElementById('ai-settings-status').textContent = '✓ đã lưu cục bộ trong trình duyệt';
+}
+function clearAISettings() {
+  localStorage.removeItem(AI_LS_KEY);
+  ['ai-apikey','ai-baseurl','ai-model','ai-system'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ai-settings-status').textContent = '✓ đã xoá';
+}
+function applyAISettings(s) {
+  if (!s) return;
+  if (s.provider) document.getElementById('ai-provider').value = s.provider;
+  if (s.apiKey)   document.getElementById('ai-apikey').value   = s.apiKey;
+  if (s.baseURL)  document.getElementById('ai-baseurl').value  = s.baseURL;
+  if (s.model)    document.getElementById('ai-model').value    = s.model;
+  if (s.system)   document.getElementById('ai-system').value   = s.system;
+}
+function getAIOpts() {
+  return {
+    provider: document.getElementById('ai-provider').value || 'openai',
+    apiKey:   document.getElementById('ai-apikey').value || '',
+    baseURL:  document.getElementById('ai-baseurl').value || '',
+    model:    document.getElementById('ai-model').value || '',
+    system:   document.getElementById('ai-system').value || '',
+  };
+}
+function onProviderChange() {
+  const id = document.getElementById('ai-provider').value;
+  const p = AI_PROVIDERS.find(x => x.id === id);
+  if (!p) return;
+  // Auto-fill baseURL + model placeholder for the provider
+  document.getElementById('ai-baseurl').placeholder = p.baseURL || 'https://...';
+  document.getElementById('ai-model').placeholder = p.defaultModel || '';
+  if (!document.getElementById('ai-baseurl').value && (id === 'openai-compat' || id === 'lmstudio' || id === 'ollama')) {
+    if (id === 'ollama')   document.getElementById('ai-baseurl').value = 'http://127.0.0.1:11434';
+    if (id === 'lmstudio') document.getElementById('ai-baseurl').value = 'http://127.0.0.1:1234/v1';
+  }
+  if (!document.getElementById('ai-model').value && p.defaultModel) {
+    document.getElementById('ai-model').value = p.defaultModel;
+  }
+  document.getElementById('ai-key-hint').textContent = p.offline ? '(offline — không cần key)' : '';
+}
+
+async function refreshModels() {
+  const sel = document.getElementById('ai-model-list');
+  sel.innerHTML = '<option value="">đang tải...</option>';
+  try {
+    const r = await fetch(`/api/public/g/${NAME}/analyze/models`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(getAIOpts()),
+    });
+    const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    sel.innerHTML = '<option value="">— chọn model —</option>' +
+      (j.models||[]).map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.label||m.id)}</option>`).join('');
+    document.getElementById('ai-settings-status').textContent = `✓ tải được ${(j.models||[]).length} model`;
+  } catch(e) {
+    sel.innerHTML = '<option value="">lỗi: '+escapeHtml(e.message)+'</option>';
+    document.getElementById('ai-settings-status').textContent = 'refresh model lỗi: ' + e.message;
+  }
+}
+
 async function initAnalyze() {
   try {
     const r = await fetch(`/api/public/g/${NAME}/analyze/info`);
     const j = await r.json();
-    const btn = document.getElementById('btn-ai');
-    if (!j.ai_available) {
-      btn.disabled = true;
-      btn.title = 'Server chưa cấu hình LLM_API_KEY';
-      document.getElementById('ai-status').textContent = '(AI tắt — cần LLM_API_KEY trên server)';
-    } else {
-      document.getElementById('ai-status').textContent = `(AI: ${j.ai_model})`;
+    AI_PROVIDERS = j.providers || [];
+    const sel = document.getElementById('ai-provider');
+    sel.innerHTML = AI_PROVIDERS.map(p => `<option value="${p.id}">${p.id}${p.offline?' (offline)':''}</option>`).join('');
+    // Restore saved settings (or fall back to env defaults)
+    const saved = loadAISettings();
+    if (saved && Object.keys(saved).length) {
+      applyAISettings(saved);
+    } else if (j.env_ai_provider) {
+      sel.value = j.env_ai_provider;
+      if (j.env_ai_model) document.getElementById('ai-model').value = j.env_ai_model;
     }
-  } catch(_){}
+    onProviderChange();
+    const haveAny = j.env_ai_available || (saved && saved.apiKey) || ['ollama','lmstudio'].includes(sel.value);
+    document.getElementById('ai-status').textContent = haveAny
+      ? `(AI: ${sel.value}${document.getElementById('ai-model').value ? ' · '+document.getElementById('ai-model').value : ''})`
+      : '(chưa cấu hình AI — mở "⚙️ Cài đặt AI" để thêm key của bạn, hoặc chạy Ollama offline)';
+  } catch(e) {
+    document.getElementById('ai-status').textContent = 'init lỗi: ' + e.message;
+  }
+}
+
+function getScopeQuery() {
+  const win = document.getElementById('an-window').value;
+  const dom = document.getElementById('an-domain').value.trim();
+  const kw  = document.getElementById('an-keyword').value.trim();
+  const ap  = document.getElementById('an-app').value.trim();
+  const q = new URLSearchParams({ since_minutes: win });
+  if (dom) q.set('domain', dom);
+  if (kw)  q.set('keyword', kw);
+  if (ap)  q.set('app', ap);
+  return q.toString();
+}
+function getScopeBody() {
+  return {
+    since_minutes: parseInt(document.getElementById('an-window').value, 10),
+    domain:  document.getElementById('an-domain').value.trim(),
+    keyword: document.getElementById('an-keyword').value.trim(),
+    app:     document.getElementById('an-app').value.trim(),
+  };
 }
 
 function renderKVList(obj) {
@@ -687,14 +847,13 @@ function renderKVList(obj) {
 }
 
 async function runAnalyze() {
-  const win = document.getElementById('an-window').value;
   document.getElementById('ai-status').textContent = 'đang quét...';
   try {
-    const r = await fetch(`/api/public/g/${NAME}/analyze?since_minutes=${win}`);
+    const r = await fetch(`/api/public/g/${NAME}/analyze?` + getScopeQuery());
     if (!r.ok) throw new Error(await r.text());
     const rep = await r.json();
     renderReport(rep);
-    document.getElementById('ai-status').textContent = `quét xong: ${rep.summary.total_flows} flows`;
+    document.getElementById('ai-status').textContent = `quét xong: ${rep.summary.total_flows} flows · ${rep.summary.unique_apps||0} apps · ${rep.summary.unique_domains||0} domains`;
   } catch(e) {
     document.getElementById('ai-status').textContent = 'lỗi: ' + e.message;
   }
@@ -703,10 +862,19 @@ async function runAnalyze() {
 function renderReport(rep) {
   // Summary card
   const scoreColor = rep.risk_score >= 60 ? 'var(--red)' : rep.risk_score >= 30 ? 'var(--orange)' : 'var(--green)';
+  const fil = rep.filters || {};
+  const filDesc = [
+    fil.domain ? 'domain=<b>'+escapeHtml(fil.domain)+'</b>' : null,
+    fil.keyword? 'keyword=<b>'+escapeHtml(fil.keyword)+'</b>' : null,
+    fil.app    ? 'app=<b>'+escapeHtml(fil.app)+'</b>' : null,
+  ].filter(Boolean).join(' · ') || '<i style="color:var(--dim)">không filter</i>';
   document.getElementById('an-summary').innerHTML = `
+    <div style="margin-bottom:8px; font-size:12px; color:var(--dim)">Scope: ${filDesc}</div>
     <div class="grid">
       <div class="kv"><div class="k">Flows phân tích</div><div class="v">${rep.summary.total_flows}</div></div>
       <div class="kv"><div class="k">Unique hosts</div><div class="v">${rep.summary.unique_hosts}</div></div>
+      <div class="kv"><div class="k">Unique domains</div><div class="v">${rep.summary.unique_domains||0}</div></div>
+      <div class="kv"><div class="k">Apps nhận dạng</div><div class="v">${rep.summary.unique_apps||0}</div></div>
       <div class="kv"><div class="k">Lỗi (4xx/5xx)</div><div class="v">${rep.summary.errors}</div></div>
       <div class="kv"><div class="k">Risk score</div><div class="v" style="color:${scoreColor}; font-size:18px; font-weight:700">${rep.risk_score}/100</div></div>
     </div>
@@ -714,6 +882,37 @@ function renderReport(rep) {
     ${rep.advice.length ? '<div style="margin-top:6px"><b>Khuyến nghị nhanh:</b><ul>' + rep.advice.map(a => '<li>'+escapeHtml(a)+'</li>').join('') + '</ul></div>' : ''}
   `;
   document.getElementById('an-summary-card').style.display = 'block';
+
+  // Apps
+  if (rep.apps && rep.apps.length) {
+    document.getElementById('an-apps').innerHTML = `
+      <table><thead><tr><th>App</th><th>Category</th><th>Hits</th><th>Hosts (mẫu)</th><th>Filter</th></tr></thead><tbody>
+        ${rep.apps.map(a => `<tr>
+          <td><b>${escapeHtml(a.name)}</b></td>
+          <td><span class="badge">${escapeHtml(a.category)}</span></td>
+          <td>${a.hits}</td>
+          <td style="font-family:ui-monospace,monospace; font-size:11px">${a.hosts.slice(0,5).map(escapeHtml).join('<br>')}${a.hosts.length>5?'<br>...+'+(a.hosts.length-5):''}</td>
+          <td><button class="ghost" style="padding:2px 8px; font-size:11px" onclick="document.getElementById('an-app').value='${escapeHtml(a.name)}'; runAnalyze()">→ chỉ xem app này</button></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    document.getElementById('an-apps-card').style.display = 'block';
+  } else document.getElementById('an-apps-card').style.display = 'none';
+
+  // Domains breakdown
+  if (rep.domains && rep.domains.length) {
+    document.getElementById('an-domains').innerHTML = `
+      <table><thead><tr><th>Domain</th><th>Hits</th><th>Lỗi</th><th>Bytes (resp)</th><th>Sub-hosts</th><th>Filter</th></tr></thead><tbody>
+        ${rep.domains.map(d => `<tr>
+          <td><b>${escapeHtml(d.domain)}</b></td>
+          <td>${d.hits}</td>
+          <td style="color:${d.errs>0?'var(--orange)':'inherit'}">${d.errs}</td>
+          <td>${(d.bytes/1024).toFixed(1)} KB</td>
+          <td style="font-family:ui-monospace,monospace; font-size:11px">${d.hosts.slice(0,4).map(escapeHtml).join(', ')}${d.hosts.length>4?' +'+(d.hosts.length-4):''}</td>
+          <td><button class="ghost" style="padding:2px 8px; font-size:11px" onclick="document.getElementById('an-domain').value='${escapeHtml(d.domain)}'; runAnalyze()">→ chỉ xem domain này</button></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    document.getElementById('an-domains-card').style.display = 'block';
+  } else document.getElementById('an-domains-card').style.display = 'none';
 
   // Trackers
   if (rep.trackers.length) {
@@ -793,21 +992,29 @@ function renderReport(rep) {
 }
 
 async function runAI() {
-  const win = document.getElementById('an-window').value;
   const status = document.getElementById('ai-status');
-  status.textContent = 'AI đang phân tích... (có thể mất 5-30s)';
+  status.textContent = 'AI đang phân tích... (5-60s tuỳ provider/model)';
   document.getElementById('btn-ai').disabled = true;
   try {
-    const r = await fetch(`/api/public/g/${NAME}/analyze/ai?since_minutes=${win}`, { method:'POST' });
+    const body = Object.assign(getScopeBody(), getAIOpts());
+    const r = await fetch(`/api/public/g/${NAME}/analyze/ai`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
     const j = await r.json();
     if (j.ai && j.ai.error) throw new Error(j.ai.error);
     if (!j.ai || !j.ai.text) throw new Error('AI trả về rỗng');
+    const rs = j.report_summary || {};
     document.getElementById('an-ai').innerHTML = `
-      <div style="color:var(--dim); font-size:11px; margin-bottom:8px">Model: ${escapeHtml(j.ai.model||'')} · Risk score rule-based: ${j.report_summary?.risk_score||0}/100</div>
+      <div style="color:var(--dim); font-size:11px; margin-bottom:8px">
+        Provider: <b>${escapeHtml(j.ai.provider||'')}</b> · Model: <b>${escapeHtml(j.ai.model||'')}</b>
+        · Risk rule-based: ${rs.risk_score||0}/100
+        · Flows: ${rs.flows_analyzed||0} · Apps: ${rs.unique_apps||0} · Domains: ${rs.unique_domains||0}
+      </div>
       <div style="background:var(--surface2); padding:14px; border-radius:6px; white-space:pre-wrap; line-height:1.6">${escapeHtml(j.ai.text)}</div>
     `;
     document.getElementById('an-ai-card').style.display = 'block';
-    status.textContent = 'AI xong';
+    status.textContent = '✓ AI xong';
   } catch(e) {
     status.textContent = 'AI lỗi: ' + e.message;
   } finally {

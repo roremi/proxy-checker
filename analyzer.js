@@ -2,17 +2,21 @@
 //
 // Hai chế độ:
 //   1) Rule-based (mặc định): scan DB bằng pattern, KHÔNG cần internet/API key.
-//      Trả về trackers, fingerprint signals, risk endpoints, mismatches, top hosts.
-//   2) AI (optional): nếu env LLM_API_KEY được set, gọi LLM để diễn giải report
-//      thành cảnh báo bằng tiếng Việt. Hỗ trợ OpenAI, Anthropic, Groq, OpenRouter
-//      thông qua biến LLM_PROVIDER (mặc định: openai-compat).
+//      Trả về trackers, fingerprint signals, risk endpoints, mismatches, top hosts,
+//      app/platform identification, per-domain breakdown.
+//   2) AI (optional): cho phép user mang API key của mình (BYOK) qua client,
+//      hoặc dùng env LLM_API_KEY trên server. Hỗ trợ nhiều provider:
+//      OpenAI, Anthropic, Google Gemini, Groq, OpenRouter, xAI, Mistral, DeepSeek,
+//      Ollama (offline), LM Studio (offline).
 //
-// Endpoint:
-//   GET  /api/public/g/:name/analyze           -> rule-based JSON report
-//   POST /api/public/g/:name/analyze/ai        -> { summary, risk_score, advice } (nếu có key)
+// Endpoints (xem captures.js):
+//   GET  /api/public/g/:name/analyze            -> rule-based JSON (?domain=&keyword=&since_minutes=)
+//   POST /api/public/g/:name/analyze/ai         -> AI summary với BYOK trong body
+//   POST /api/public/g/:name/analyze/models     -> liệt kê model của provider
 
 const path = require('path');
 const Database = require('better-sqlite3');
+const aiProviders = require('./aiProviders');
 
 const db = new Database(path.join(__dirname, 'captures.db'), { readonly: false });
 
@@ -76,7 +80,134 @@ const TRACKER_HOSTS = [
   { m: 'mobiletelemetry.ebay',   cat: 'telemetry',   vendor: 'eBay Telemetry',          what: 'Continuous device + behaviour reporting' },
   { m: 'identity-api.ebay',      cat: 'auth',        vendor: 'eBay Identity',           what: 'Login + step-up auth + risk' },
   { m: 'mobifts.ebay',           cat: 'feature',     vendor: 'eBay Feature Toggle',     what: 'Feature flag service (gửi device JWT)' },
+  // Payments / KYC
+  { m: 'stripe.com',             cat: 'payment',     vendor: 'Stripe',                  what: 'Card tokenization + Radar fingerprint (m.stripe.com/6 collects device)' },
+  { m: 'm.stripe.com',           cat: 'fraud',       vendor: 'Stripe Radar',            what: 'Fraud signals (canvas/audio/webgl/timezone/font)' },
+  { m: 'paypal.com',             cat: 'payment',     vendor: 'PayPal',                  what: 'Payments + risk' },
+  { m: 'paypalobjects.com',      cat: 'fraud',       vendor: 'PayPal',                  what: 'fpti.js fingerprint script' },
+  { m: 'braintreegateway',       cat: 'payment',     vendor: 'Braintree',               what: 'Payments + Kount-style fingerprint' },
+  { m: 'kount.com',              cat: 'fraud',       vendor: 'Kount',                   what: 'Device fingerprint anti-fraud' },
+  { m: 'jumio.com',              cat: 'kyc',         vendor: 'Jumio',                   what: 'ID verification + liveness' },
+  { m: 'onfido.com',             cat: 'kyc',         vendor: 'Onfido',                  what: 'KYC document + biometric' },
+  { m: 'persona.com',            cat: 'kyc',         vendor: 'Persona',                 what: 'KYC' },
+  { m: 'plaid.com',              cat: 'banking',     vendor: 'Plaid',                   what: 'Bank data aggregation' },
+  // Big tech app SDKs
+  { m: 'googleads.g.doubleclick',cat: 'ads',         vendor: 'Google Ads',              what: 'Conversion tracking' },
+  { m: 'googlesyndication',      cat: 'ads',         vendor: 'Google AdSense',          what: 'Ad serving' },
+  { m: 'graph.facebook.com',     cat: 'social',      vendor: 'Meta Graph',              what: 'FB API (login, share, ads conversion)' },
+  { m: 'snap.licdn.com',         cat: 'social',      vendor: 'LinkedIn',                what: 'Insight tag' },
+  { m: 'analytics.tiktok.com',   cat: 'ads',         vendor: 'TikTok Pixel',            what: 'Ad attribution + events' },
+  { m: 'log.byteoversea',        cat: 'analytics',   vendor: 'ByteDance Telemetry',     what: 'TikTok/CapCut device telemetry' },
+  { m: 'pangle',                 cat: 'ads',         vendor: 'Pangle (ByteDance)',      what: 'Ad SDK' },
+  { m: 'analytics.snap',         cat: 'social',      vendor: 'Snapchat',                what: 'Snap Pixel' },
+  { m: 'pinimg.com',             cat: 'social',      vendor: 'Pinterest',               what: 'Tag' },
+  { m: 'reddit.com/api',         cat: 'social',      vendor: 'Reddit',                  what: 'API' },
+  { m: 'twitter.com/i/jot',      cat: 'social',      vendor: 'Twitter/X',               what: 'Client telemetry' },
+  { m: 't.co/i',                 cat: 'social',      vendor: 'Twitter/X',               what: 'Click telemetry' },
+  // Maps / location
+  { m: 'maps.googleapis.com',    cat: 'location',    vendor: 'Google Maps',             what: 'Geocoding + place lookups' },
+  { m: 'mapbox.com',             cat: 'location',    vendor: 'Mapbox',                  what: 'Map tiles + geocoding' },
+  { m: 'geo.opera.com',          cat: 'location',    vendor: 'Opera Geo',               what: 'IP geolocation' },
+  // ML / AI fingerprint endpoints
+  { m: 'castle.io',              cat: 'fraud',       vendor: 'Castle',                  what: 'Account takeover + risk' },
+  { m: 'shape.com',              cat: 'fraud',       vendor: 'Shape Security',          what: 'Bot defense (now F5)' },
+  { m: 'kasada.io',              cat: 'fraud',       vendor: 'Kasada',                  what: 'Bot defense (Polyform)' },
+  // Misc
+  { m: 'cloudflareinsights',     cat: 'analytics',   vendor: 'Cloudflare Analytics',    what: 'RUM beacon' },
+  { m: 'newrelic.com',           cat: 'analytics',   vendor: 'New Relic',               what: 'APM + Browser RUM' },
+  { m: 'datadoghq.com',          cat: 'analytics',   vendor: 'Datadog',                 what: 'RUM + Logs' },
+  { m: 'sumologic',              cat: 'analytics',   vendor: 'Sumo Logic',              what: 'Logs ingest' },
 ];
+
+// ─── App / platform identification (User-Agent + Host hints) ───
+// Map a flow to an APP (TikTok, eBay, Banking VN...) and a CATEGORY (e-com,
+// social, banking, gaming, news, dating, gov...). Multiple patterns can match.
+const APP_FINGERPRINTS = [
+  // E-commerce
+  { name: 'eBay',           cat: 'e-commerce',  hostRx: /\.ebay\.com|\.ebay\.[a-z]{2}|ebaystatic|ebayimg/i,        uaRx: /eBayApp|com\.ebay/i },
+  { name: 'Amazon',         cat: 'e-commerce',  hostRx: /\.amazon\.[a-z.]+|amzn\.to|m\.media-amazon/i,             uaRx: /AmazonAppStore|com\.amazon\.mShop/i },
+  { name: 'Shopee',         cat: 'e-commerce',  hostRx: /shopee\.[a-z.]+|shp\.ee/i,                                uaRx: /ShopeeApp|com\.shopee/i },
+  { name: 'Lazada',         cat: 'e-commerce',  hostRx: /lazada\.[a-z.]+|lzd\.co/i,                                uaRx: /LazadaApp|com\.lazada/i },
+  { name: 'TikTok Shop',    cat: 'e-commerce',  hostRx: /tiktokshop|shop-api\.tiktok/i },
+  { name: 'Tiki',           cat: 'e-commerce',  hostRx: /tiki\.vn/i },
+  { name: 'Sendo',          cat: 'e-commerce',  hostRx: /sendo\.vn/i },
+  { name: 'AliExpress',     cat: 'e-commerce',  hostRx: /aliexpress\.|alibaba\./i },
+  { name: 'Etsy',           cat: 'e-commerce',  hostRx: /etsy\.com/i },
+  { name: 'Walmart',        cat: 'e-commerce',  hostRx: /walmart\.com/i },
+  // Social
+  { name: 'Facebook',       cat: 'social',      hostRx: /facebook\.com|fbcdn\.net|graph\.facebook|messenger\.com/i, uaRx: /FBAN|FBAV|com\.facebook/i },
+  { name: 'Instagram',      cat: 'social',      hostRx: /instagram\.com|cdninstagram/i,                            uaRx: /Instagram|com\.instagram/i },
+  { name: 'TikTok',         cat: 'social',      hostRx: /tiktok\.com|tiktokv|byteoversea|musical\.ly/i,            uaRx: /TikTok|com\.zhiliaoapp\.musically|com\.ss\.android\.ugc/i },
+  { name: 'Twitter/X',      cat: 'social',      hostRx: /(^|\.)twitter\.com|(^|\.)x\.com|twimg\.com/i,             uaRx: /Twitter|com\.twitter/i },
+  { name: 'Snapchat',       cat: 'social',      hostRx: /snap(chat)?\.com|snapkit/i,                              uaRx: /Snapchat|com\.snapchat/i },
+  { name: 'LinkedIn',       cat: 'social',      hostRx: /linkedin\.com|licdn\.com/i,                              uaRx: /LinkedIn|com\.linkedin/i },
+  { name: 'Reddit',         cat: 'social',      hostRx: /reddit\.com|redditstatic|redd\.it/i,                     uaRx: /Reddit|com\.reddit/i },
+  { name: 'Discord',        cat: 'social',      hostRx: /discord(app)?\.com|discord\.gg/i },
+  { name: 'Telegram',       cat: 'messaging',   hostRx: /telegram\.org|t\.me|tdesktop/i },
+  { name: 'Zalo',           cat: 'messaging',   hostRx: /zalo\.me|zdn\.vn|zaloapp\.com/i },
+  { name: 'WhatsApp',       cat: 'messaging',   hostRx: /whatsapp\.net|wa\.me/i },
+  // Streaming
+  { name: 'YouTube',        cat: 'streaming',   hostRx: /youtube\.com|youtu\.be|ytimg|googlevideo/i,              uaRx: /com\.google\.android\.youtube/i },
+  { name: 'Netflix',        cat: 'streaming',   hostRx: /netflix\.com|nflxvideo|nflximg/i },
+  { name: 'Spotify',        cat: 'streaming',   hostRx: /spotify\.com|scdn\.co/i },
+  { name: 'Twitch',         cat: 'streaming',   hostRx: /twitch\.tv|ttvnw\.net/i },
+  // Banking VN
+  { name: 'Vietcombank',    cat: 'banking',     hostRx: /vietcombank|vcb\./i },
+  { name: 'Techcombank',    cat: 'banking',     hostRx: /techcombank|tcbs/i },
+  { name: 'MB Bank',        cat: 'banking',     hostRx: /mbbank|tpb\.vn/i },
+  { name: 'VPBank',         cat: 'banking',     hostRx: /vpbank/i },
+  { name: 'Momo',           cat: 'fintech',     hostRx: /momo\.vn|m_service/i },
+  { name: 'ZaloPay',        cat: 'fintech',     hostRx: /zalopay/i },
+  { name: 'VNPay',          cat: 'fintech',     hostRx: /vnpay/i },
+  // Banking global
+  { name: 'PayPal',         cat: 'fintech',     hostRx: /paypal\.com|paypalobjects/i },
+  { name: 'Wise',           cat: 'fintech',     hostRx: /wise\.com|transferwise/i },
+  { name: 'Revolut',        cat: 'fintech',     hostRx: /revolut\.com/i },
+  // Crypto
+  { name: 'Binance',        cat: 'crypto',      hostRx: /binance\.com|binance\.org/i },
+  { name: 'Coinbase',       cat: 'crypto',      hostRx: /coinbase\.com/i },
+  { name: 'Metamask',       cat: 'crypto',      hostRx: /metamask\.io|infura\.io/i },
+  // Gaming
+  { name: 'Steam',          cat: 'gaming',      hostRx: /steamcommunity|steampowered|steamstatic/i },
+  { name: 'Roblox',         cat: 'gaming',      hostRx: /roblox\.com|rbxcdn/i },
+  { name: 'Genshin/HoYo',   cat: 'gaming',      hostRx: /hoyoverse|mihoyo|yuanshen/i },
+  // Productivity / cloud
+  { name: 'Google',         cat: 'productivity',hostRx: /google\.com|googleapis|gstatic|google-analytics|googleads|googletagmanager|gvt[12]/i },
+  { name: 'Microsoft',      cat: 'productivity',hostRx: /microsoft\.com|microsoftonline|live\.com|office\.com|sharepoint|onedrive|outlook\.com/i },
+  { name: 'Apple',          cat: 'productivity',hostRx: /apple\.com|icloud\.com|mzstatic|itunes\.apple/i },
+  { name: 'Cloudflare',     cat: 'infra',       hostRx: /cloudflare\.com|cloudflareinsights|challenges\.cloudflare/i },
+  // Dating
+  { name: 'Tinder',         cat: 'dating',      hostRx: /tinder\.com|gotinder/i },
+  { name: 'Bumble',         cat: 'dating',      hostRx: /bumble\.com/i },
+];
+
+function identifyApp(host, ua) {
+  const h = (host || '').toLowerCase();
+  const u = (ua   || '');
+  const matches = [];
+  for (const a of APP_FINGERPRINTS) {
+    if (a.hostRx && a.hostRx.test(h)) matches.push(a);
+    else if (a.uaRx && a.uaRx.test(u)) matches.push(a);
+  }
+  return matches;
+}
+
+// Extract eTLD+1-ish (best effort, no PSL): take last 2 labels (or 3 for *.co.uk, *.com.vn etc.)
+const MULTI_TLD = /\.(co\.uk|co\.jp|com\.vn|com\.au|com\.cn|com\.br|com\.tw|co\.kr|co\.in|net\.au|net\.cn|org\.uk)$/i;
+function rootDomain(host) {
+  const h = (host || '').toLowerCase().replace(/^\[?[^\]]*\]?(?::\d+)?$/, m => m); // strip port
+  if (!h || /^\d+\.\d+\.\d+\.\d+$/.test(h)) return h;
+  const m = h.match(MULTI_TLD);
+  if (m) {
+    const idx = h.lastIndexOf(m[0]);
+    const head = h.slice(0, idx);
+    const last = head.split('.').pop() || '';
+    return last + m[0];
+  }
+  const parts = h.split('.');
+  if (parts.length <= 2) return h;
+  return parts.slice(-2).join('.');
+}
 
 // Header patterns that indicate fingerprint/tracking
 const FP_HEADER_RX = [
@@ -156,19 +287,48 @@ function categorizeHost(host) {
 }
 
 // ─── Main analyzer ───
+// opts:
+//   since (ms epoch) | since_minutes
+//   limit (default 5000, cap 20000)
+//   domain (substring filter on host, also matches by rootDomain)
+//   keyword (substring filter on url+path+host+req body — case-insensitive)
+//   app (filter to flows belonging to a specific identified app, e.g. 'eBay')
 function analyzeGateway(name, opts = {}) {
   const since = opts.since || (Date.now() - 24 * 3600_000);
   const limit = Math.min(parseInt(opts.limit, 10) || 5000, 20000);
+  const domainFilter  = (opts.domain  || '').trim().toLowerCase();
+  const keywordFilter = (opts.keyword || '').trim().toLowerCase();
+  const appFilter     = (opts.app     || '').trim().toLowerCase();
 
-  const flows = db.prepare(`
+  // Pull a wider set then filter in JS (so the same query supports all filters)
+  const rawFlows = db.prepare(`
     SELECT id, ts, method, host, path, url, status, req_headers, res_headers,
            req_body_b64, res_body_b64, req_size, res_size
       FROM flows
      WHERE gateway = ? AND ts >= ?
-     ORDER BY ts DESC LIMIT ?`).all(name, since, limit);
+     ORDER BY ts DESC LIMIT ?`).all(name, since, Math.min(limit * 4, 80_000));
+
+  const flows = rawFlows.filter(f => {
+    if (domainFilter) {
+      const h = (f.host || '').toLowerCase();
+      if (!h.includes(domainFilter) && rootDomain(h) !== domainFilter) return false;
+    }
+    if (keywordFilter) {
+      const hay = ((f.url || '') + ' ' + (f.host || '') + ' ' + (f.path || '') + ' ' + decodeBody(f.req_body_b64, 2000)).toLowerCase();
+      if (!hay.includes(keywordFilter)) return false;
+    }
+    if (appFilter) {
+      let ua = '';
+      try { ua = (JSON.parse(f.req_headers || '{}')['user-agent'] || JSON.parse(f.req_headers || '{}')['User-Agent'] || ''); } catch(_){}
+      const apps = identifyApp(f.host, ua);
+      if (!apps.find(a => a.name.toLowerCase() === appFilter)) return false;
+    }
+    return true;
+  }).slice(0, limit);
 
   const report = {
     gateway: name,
+    filters: { domain: domainFilter || null, keyword: keywordFilter || null, app: appFilter || null },
     window: { since, until: Date.now(), flows_analyzed: flows.length },
     summary: { total_flows: flows.length, unique_hosts: 0, errors: 0 },
     trackers: {},          // key: vendor → { vendor, category, what, hits, sample_path, hosts:Set }
@@ -183,12 +343,33 @@ function analyzeGateway(name, opts = {}) {
     top_hosts: {},         // host → count
     auth_bearer_seen: 0,
     pii_in_url: [],
+    apps: {},              // appName → { name, category, hits, hosts:[] }
+    domains: {},           // rootDomain → { domain, hits, hosts:[], errs, bytes }
   };
 
   for (const f of flows) {
     const host = f.host || '';
     report.top_hosts[host] = (report.top_hosts[host] || 0) + 1;
     if ((f.status || 0) >= 400) report.summary.errors++;
+
+    // 0a) per-domain rollup
+    const rd = rootDomain(host);
+    if (rd) {
+      const d = report.domains[rd] || (report.domains[rd] = { domain: rd, hits: 0, hosts: [], errs: 0, bytes: 0 });
+      d.hits++;
+      if ((f.status || 0) >= 400) d.errs++;
+      d.bytes += (f.res_size || 0);
+      if (!d.hosts.includes(host)) d.hosts.push(host);
+    }
+
+    // 0b) app identification (uses User-Agent in addition to host)
+    let _ua = '';
+    try { const _h = JSON.parse(f.req_headers || '{}'); _ua = _h['user-agent'] || _h['User-Agent'] || ''; } catch(_){}
+    for (const a of identifyApp(host, _ua)) {
+      const ap = report.apps[a.name] || (report.apps[a.name] = { name: a.name, category: a.cat, hits: 0, hosts: [] });
+      ap.hits++;
+      if (!ap.hosts.includes(host)) ap.hosts.push(host);
+    }
 
     // 1) tracker host catalog
     const cat = categorizeHost(host);
@@ -309,6 +490,8 @@ function analyzeGateway(name, opts = {}) {
   }
 
   report.summary.unique_hosts = Object.keys(report.top_hosts).length;
+  report.summary.unique_domains = Object.keys(report.domains).length;
+  report.summary.unique_apps    = Object.keys(report.apps).length;
 
   // Convert maps to arrays sorted by hits
   report.trackers = Object.values(report.trackers).sort((a, b) => b.hits - a.hits);
@@ -318,6 +501,8 @@ function analyzeGateway(name, opts = {}) {
   report.top_hosts = Object.entries(report.top_hosts)
     .sort((a, b) => b[1] - a[1]).slice(0, 30)
     .map(([host, count]) => ({ host, count }));
+  report.apps = Object.values(report.apps).sort((a, b) => b.hits - a.hits);
+  report.domains = Object.values(report.domains).sort((a, b) => b.hits - a.hits).slice(0, 50);
   report.auth_chain.sort((a, b) => a.ts - b.ts);
 
   // ─── Geo mismatch detection ───
@@ -398,63 +583,98 @@ function analyzeGateway(name, opts = {}) {
   return report;
 }
 
-// ─── Optional: AI summarization ───
-async function aiSummarize(report) {
-  const apiKey = process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY;
-  if (!apiKey) return { error: 'LLM_API_KEY chưa cấu hình. Set biến môi trường LLM_API_KEY (OpenAI/Groq/OpenRouter compatible) rồi restart service.' };
+// ─── AI summarization (multi-provider, BYOK) ───
+// aiOpts (all optional, fall back to server env):
+//   provider: 'openai'|'anthropic'|'google'|'groq'|'openrouter'|'xai'|'mistral'|'deepseek'|'ollama'|'lmstudio'|'openai-compat'
+//   apiKey:   string (BYOK from client; never logged)
+//   baseURL:  override for openai-compat/ollama/lmstudio
+//   model:    string
+//   system:   custom system prompt
+//   user:     custom user prompt prefix
+//   temperature, maxTokens
+const DEFAULT_SYSTEM_PROMPT = `Bạn là chuyên gia bảo mật/forensic phân tích traffic mobile/web đã capture qua MITM proxy.
+Trả lời bằng tiếng Việt, có cấu trúc Markdown rõ ràng và CHI TIẾT:
 
-  const baseURL = process.env.LLM_BASE_URL || 'https://api.openai.com/v1';
-  const model = process.env.LLM_MODEL || 'gpt-4o-mini';
+1) **Nhận dạng app/nền tảng**: app gì, category gì (e-com, social, banking, gaming...). Nếu nhiều app trong cùng session, liệt kê.
+2) **Tracker / Fraud engine**: vendor nào đang fingerprint (ThreatMetrix, FingerprintJS, Sift, Akamai BotManager, DataDome, Stripe Radar...). Mỗi cái họ thu thập gì cụ thể.
+3) **Dữ liệu PII / Device** bị gửi đi: liệt kê field name + ý nghĩa (IDFA/GAID, deviceGuid, IMEI, push token, geo, sensor data, canvas hash...).
+4) **Tín hiệu theo dõi nâng cao**: cookies set, JWT decoded (claim quan trọng), correlation ID, telemetry endpoints, session replay.
+5) **Mâu thuẫn / Red flags**: timezone vs locale vs IP vs marketplace, step-up auth/2FA forced, captcha trigger, error patterns.
+6) **Khuyến nghị giảm thiểu** thực tế: cách user giảm fingerprint surface (đổi proxy, reset device, đồng bộ TZ/locale, tắt advertising ID, dùng VPN cùng region với account...).
+7) **Risk verdict**: Low / Medium / High với lý do ngắn gọn.
 
-  // Trim report so it fits in token budget
-  const compact = {
+Trình bày bằng bullet list, đậm vendor name. Không khuyên hành vi vi phạm pháp luật/ToS — chỉ awareness và privacy hygiene.`;
+
+function buildCompactReport(report) {
+  return {
     gateway: report.gateway,
+    filters: report.filters,
     window: report.window,
     summary: report.summary,
     risk_score: report.risk_score,
     risk_reasons: report.risk_reasons,
-    trackers: report.trackers.slice(0, 20),
-    fp_headers: report.fp_headers.slice(0, 30).map(h => ({ h: h.header, n: h.count, sample: h.sample_value?.slice(0, 60) })),
-    fp_body_fields: report.fp_body_fields.slice(0, 20),
-    risk_endpoints: report.risk_endpoints.slice(0, 15),
-    cookies_set: report.cookies_set.slice(0, 20).map(c => c.name),
-    auth_chain: report.auth_chain,
-    geo_signals: report.geo_signals,
+    apps:        report.apps.slice(0, 15),
+    domains:     report.domains.slice(0, 25),
+    trackers:    report.trackers.slice(0, 25),
+    fp_headers:  report.fp_headers.slice(0, 30).map(h => ({ h: h.header, n: h.count, why: h.why, sample: (h.sample_value || '').slice(0, 80) })),
+    fp_body_fields: report.fp_body_fields.slice(0, 25),
+    risk_endpoints: report.risk_endpoints.slice(0, 20),
+    cookies_set:  report.cookies_set.slice(0, 25).map(c => ({ name: c.name, host: c.host })),
+    auth_chain:   report.auth_chain.slice(0, 20),
+    geo_signals:  report.geo_signals,
     geo_mismatches: report.geo_mismatches,
-    top_hosts: report.top_hosts.slice(0, 15),
+    top_hosts:    report.top_hosts.slice(0, 15),
     jwt_payload_samples: report.jwt_tokens.slice(0, 3).map(j => j.payload),
   };
-
-  const sys = `Bạn là chuyên gia bảo mật/forensic phân tích traffic mobile/web đã capture qua MITM proxy.
-Trả lời bằng tiếng Việt, ngắn gọn, có cấu trúc Markdown:
-1) **Tóm tắt**: hệ thống nào đang theo dõi (vendor + category)
-2) **Dữ liệu bị thu thập**: liệt kê PII/device data cụ thể
-3) **Tín hiệu rủi ro**: tại sao server có thể đã flag user (mismatch, step-up, fingerprint persistent...)
-4) **Khuyến nghị giảm thiểu**: hướng dẫn thực tế cho user
-Tránh đưa hướng dẫn vi phạm pháp luật/ToS. Tập trung vào awareness và privacy hygiene.`;
-
-  const body = {
-    model,
-    temperature: 0.3,
-    messages: [
-      { role: 'system', content: sys },
-      { role: 'user', content: 'Đây là report rule-based:\n```json\n' + JSON.stringify(compact, null, 2) + '\n```\nHãy phân tích.' },
-    ],
-  };
-
-  try {
-    const r = await fetch(baseURL.replace(/\/$/, '') + '/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
-      body: JSON.stringify(body),
-    });
-    const j = await r.json();
-    if (!r.ok) return { error: j.error?.message || ('HTTP ' + r.status), raw: j };
-    const text = j.choices?.[0]?.message?.content || '(LLM trả về rỗng)';
-    return { ok: true, model, text };
-  } catch(e) {
-    return { error: 'LLM call failed: ' + e.message };
-  }
 }
 
-module.exports = { analyzeGateway, aiSummarize };
+async function aiSummarize(report, aiOpts = {}) {
+  const provider = (aiOpts.provider || process.env.LLM_PROVIDER || 'openai').toLowerCase();
+  const apiKey   = aiOpts.apiKey   || process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY || '';
+  const baseURL  = aiOpts.baseURL  || process.env.LLM_BASE_URL || '';
+  const model    = aiOpts.model    || process.env.LLM_MODEL    || '';
+  const system   = aiOpts.system   || DEFAULT_SYSTEM_PROMPT;
+  const userPref = aiOpts.user     || '';
+  const temperature = aiOpts.temperature;
+  const maxTokens   = aiOpts.maxTokens || 3072;
+
+  // Local providers don't need a key; remote do
+  const localProvider = provider === 'ollama' || provider === 'lmstudio';
+  if (!apiKey && !localProvider) {
+    return { error: 'Chưa có API key. Cấu hình LLM_API_KEY trên server hoặc nhập API key của bạn ở mục Cài đặt AI (BYOK), hoặc chọn provider offline (Ollama / LM Studio).' };
+  }
+
+  const compact = buildCompactReport(report);
+  const filterDesc = [];
+  if (report.filters.domain)  filterDesc.push('domain=' + report.filters.domain);
+  if (report.filters.keyword) filterDesc.push('keyword=' + report.filters.keyword);
+  if (report.filters.app)     filterDesc.push('app=' + report.filters.app);
+  const scopeDesc = filterDesc.length ? '(scope: ' + filterDesc.join(', ') + ')' : '(scope: tất cả)';
+
+  const userMsg = (userPref ? userPref + '\n\n' : '') +
+    `Đây là report rule-based ${scopeDesc}:\n\`\`\`json\n` +
+    JSON.stringify(compact, null, 2) +
+    '\n\`\`\`\n\nHãy phân tích chi tiết theo cấu trúc đã chỉ định.';
+
+  return await aiProviders.chat({
+    provider, apiKey, baseURL, model,
+    system, user: userMsg, temperature, maxTokens,
+  });
+}
+
+async function listAIModels(aiOpts = {}) {
+  return await aiProviders.listModels({
+    provider: aiOpts.provider,
+    apiKey:   aiOpts.apiKey || process.env.LLM_API_KEY || '',
+    baseURL:  aiOpts.baseURL,
+  });
+}
+
+function listProviders() {
+  return Object.entries(aiProviders.PRESETS).map(([id, p]) => ({
+    id, baseURL: p.baseURL, defaultModel: p.defaultModel,
+    auth: p.auth, offline: id === 'ollama' || id === 'lmstudio',
+  }));
+}
+
+module.exports = { analyzeGateway, aiSummarize, listAIModels, listProviders, identifyApp, rootDomain };

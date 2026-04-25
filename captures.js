@@ -290,44 +290,79 @@ function attach(app, server, requireVpnToken) {
   try { analyzer = require('./analyzer'); }
   catch(e) { console.warn('[captures] analyzer not loaded:', e.message); }
 
-  // Quick info — does AI work?
+  // Helper: build analyzer scope opts from query/body
+  function buildScopeOpts(src) {
+    const sinceMin = parseInt(src.since_minutes, 10);
+    return {
+      limit: parseInt(src.limit, 10) || 5000,
+      since: Number.isFinite(sinceMin) && sinceMin > 0 ? Date.now() - sinceMin * 60_000 : undefined,
+      domain:  (src.domain  || '').toString().slice(0, 200),
+      keyword: (src.keyword || '').toString().slice(0, 200),
+      app:     (src.app     || '').toString().slice(0, 80),
+    };
+  }
+
+  // Quick info — providers, env-key availability, presets
   app.get('/api/public/g/:name/analyze/info', (req, res) => {
-    const hasKey = !!(process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY);
+    const envKey = !!(process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY);
     res.json({
       rule_based: !!analyzer,
-      ai_available: hasKey,
-      ai_model: process.env.LLM_MODEL || (hasKey ? 'gpt-4o-mini' : null),
+      env_ai_available: envKey,
+      env_ai_provider: process.env.LLM_PROVIDER || (envKey ? 'openai' : null),
+      env_ai_model:    process.env.LLM_MODEL    || null,
+      providers: analyzer ? analyzer.listProviders() : [],
     });
   });
 
-  // Rule-based analysis
+  // List models for a given provider (BYOK in body)
+  app.post('/api/public/g/:name/analyze/models', async (req, res) => {
+    if (!analyzer) return res.status(500).json({ error: 'analyzer module not loaded' });
+    try {
+      const { provider, apiKey, baseURL } = req.body || {};
+      const r = await analyzer.listAIModels({ provider, apiKey, baseURL });
+      res.json(r);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // Rule-based analysis (with optional scope filters)
   app.get('/api/public/g/:name/analyze', (req, res) => {
     if (!analyzer) return res.status(500).json({ error: 'analyzer module not loaded' });
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) return res.status(400).json({ error: 'bad name' });
     try {
-      const sinceMin = parseInt(req.query.since_minutes, 10);
-      const opts = {
-        limit: parseInt(req.query.limit, 10) || 5000,
-        since: Number.isFinite(sinceMin) && sinceMin > 0 ? Date.now() - sinceMin * 60_000 : undefined,
-      };
-      res.json(analyzer.analyzeGateway(name, opts));
+      res.json(analyzer.analyzeGateway(name, buildScopeOpts(req.query)));
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
-  // AI summary (optional)
+  // AI summary — BYOK in body, scope in body
   app.post('/api/public/g/:name/analyze/ai', async (req, res) => {
     if (!analyzer) return res.status(500).json({ error: 'analyzer module not loaded' });
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) return res.status(400).json({ error: 'bad name' });
     try {
-      const sinceMin = parseInt(req.query.since_minutes, 10);
-      const report = analyzer.analyzeGateway(name, {
-        limit: 5000,
-        since: Number.isFinite(sinceMin) && sinceMin > 0 ? Date.now() - sinceMin * 60_000 : undefined,
+      const body = req.body || {};
+      const report = analyzer.analyzeGateway(name, buildScopeOpts(body));
+      const ai = await analyzer.aiSummarize(report, {
+        provider: body.provider,
+        apiKey:   body.apiKey,    // BYOK — used once, NOT persisted
+        baseURL:  body.baseURL,
+        model:    body.model,
+        system:   body.system,
+        user:     body.user,
+        temperature: body.temperature,
+        maxTokens:   body.maxTokens,
       });
-      const ai = await analyzer.aiSummarize(report);
-      res.json({ report_summary: { risk_score: report.risk_score, risk_reasons: report.risk_reasons }, ai });
+      res.json({
+        report_summary: {
+          risk_score: report.risk_score,
+          risk_reasons: report.risk_reasons,
+          flows_analyzed: report.window.flows_analyzed,
+          unique_apps: report.summary.unique_apps,
+          unique_domains: report.summary.unique_domains,
+          filters: report.filters,
+        },
+        ai,
+      });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 
