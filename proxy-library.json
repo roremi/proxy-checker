@@ -138,5 +138,20 @@
     "sc_is_tor": false,
     "saved_at": "2026-04-25T07:25:26.225Z",
     "updated_at": "2026-04-25T07:27:32.907Z"
+  },
+  "165.154.172.188:2752:300d37461782:qanbpk7ims7mpunkaaah": {
+    "proxy": "165.154.172.188:2752:300d37461782:qanbpk7ims7mpunkaaah",
+    "ip": "45.19.131.234",
+    "country": "United States",
+    "city": "Terrell",
+    "isp": "AT&T Enterprises, LLC",
+    "usage": "Corporate / Business",
+    "tcp_os": "Android",
+    "sc_risk": "low",
+    "sc_score": 11,
+    "sc_is_vpn": false,
+    "sc_is_dc": false,
+    "sc_is_tor": false,
+    "saved_at": "2026-04-26T13:44:13.487Z"
   }
 }
