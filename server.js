@@ -1098,6 +1098,73 @@ app.delete('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT /api/customer/proxy/:name — change the upstream SOCKS/HTTP proxy on an owned gateway
+app.put('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
+  const k = req.apiKey;
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
+  const myGws = k.my_gateways || [];
+  if (!myGws.includes(name)) return res.status(403).json({ error: 'Not your gateway' });
+  const { proxy_url } = req.body || {};
+  if (!proxy_url) return res.status(400).json({ error: 'proxy_url required' });
+  try {
+    const settings = settingsLoad();
+    const token = settings.admin_password || VPN_TOKEN;
+    const r = await fetch(`http://127.0.0.1:${PORT}/api/gateways/${encodeURIComponent(name)}/proxy`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'x-vpn-token': token },
+      body: JSON.stringify({ proxy_url }),
+    });
+    const d = await r.json().catch(() => ({}));
+    res.status(r.status).json(d);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/customer/usage — bandwidth used by this customer (total + per VPN tunnel)
+// Reads kernel byte counters on each gateway's tun2socks TUN device.
+app.get('/api/customer/usage', requireApiKey(), (req, res) => {
+  const k = req.apiKey;
+  const gateways = gwLoad();
+  const myGws = k.my_gateways || [];
+  function readGwBw(gw) {
+    try {
+      const dev = gw.t2s_dev;
+      if (!dev) return { rx: 0, tx: 0, total: 0, available: false };
+      const rx = parseInt(fs.readFileSync(`/sys/class/net/${dev}/statistics/rx_bytes`, 'utf8'), 10) || 0;
+      const tx = parseInt(fs.readFileSync(`/sys/class/net/${dev}/statistics/tx_bytes`, 'utf8'), 10) || 0;
+      return { rx, tx, total: rx + tx, available: true };
+    } catch (_) { return { rx: 0, tx: 0, total: 0, available: false }; }
+  }
+  const per = myGws.map(name => {
+    const g = gateways[name]; if (!g) return null;
+    const bw = readGwBw(g);
+    let running = false;
+    try { execSync(`systemctl is-active tun2socks@${name}`, { stdio: 'ignore' }); running = true; } catch (_) {}
+    return {
+      name, country: g.country || '', exit_ip: g.exit_ip || '',
+      vpn_port: g.vpn_port || null, running,
+      rx_bytes: bw.rx, tx_bytes: bw.tx, total_bytes: bw.total, available: bw.available,
+    };
+  }).filter(Boolean);
+  const totalBytes = per.reduce((a, x) => a + (x.total_bytes || 0), 0);
+  // Mirror to bandwidth_used_bytes so admin Keys view stays in sync.
+  try {
+    const keys = keysLoad();
+    if (keys[k.id]) {
+      keys[k.id].bandwidth_used_bytes = totalBytes;
+      keysSave(keys);
+    }
+  } catch (_) {}
+  const limitBytes = k.bandwidth_limit_gb ? k.bandwidth_limit_gb * 1024 * 1024 * 1024 : null;
+  res.json({
+    total_bytes: totalBytes,
+    limit_bytes: limitBytes,
+    limit_gb: k.bandwidth_limit_gb || null,
+    over_limit: limitBytes ? totalBytes >= limitBytes : false,
+    note: 'Counters reflect bytes through the SOCKS bridge since each VPN tunnel was last (re)started.',
+    gateways: per,
+  });
+});
+
 // GET /api/customer/gateway/:name/ip — check current exit IP through the proxy
 app.get('/api/customer/gateway/:name/ip', requireApiKey(), async (req, res) => {
   const k = req.apiKey;

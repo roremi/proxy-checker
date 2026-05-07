@@ -311,6 +311,10 @@ textarea{resize:vertical}
       </div>
       <div class="stat-row" id="dash-stats"></div>
       <div class="card">
+        <div class="card-head"><h2>&#128202; Bandwidth Usage</h2><button class="btn btn-xs" onclick="loadUsage()" title="Refresh">&#8635;</button></div>
+        <div class="card-body" id="dash-usage"><div class="text-dim text-sm">Loading…</div></div>
+      </div>
+      <div class="card">
         <div class="card-head"><h2>&#128273; API Key</h2></div>
         <div class="card-body">
           <div style="display:flex;gap:6px">
@@ -529,10 +533,35 @@ textarea{resize:vertical}
   </div>
 </div>
 
-<!-- Modal: New client on existing gateway -->
-<div class="overlay" id="new-client-modal">
+<!-- Modal: Change Proxy on existing gateway -->
+<div class="overlay" id="change-proxy-modal">
   <div class="modal">
-    <div class="modal-head"><h3 id="new-client-title">Add Device</h3><button class="close-btn" onclick="closeNewClient()">&#215;</button></div>
+    <div class="modal-head"><h3>&#128257; Change Upstream Proxy</h3><button class="close-btn" onclick="closeChangeProxy()">&#215;</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info">The VPN tunnel will be tested with the new proxy and <code>tun2socks</code> restarted. Your <strong>.ovpn</strong> config keeps working — only the upstream changes.</div>
+      <div class="fg">
+        <label>VPN Tunnel</label>
+        <input type="text" id="cp-name" disabled style="font-family:monospace">
+      </div>
+      <div class="fg">
+        <label>Current proxy</label>
+        <input type="text" id="cp-current" disabled style="font-family:monospace">
+      </div>
+      <div class="fg">
+        <label>New proxy URL</label>
+        <input type="text" id="cp-new" placeholder="socks5://user:pass@host:port  or  http://host:port">
+        <p class="hint">Supported: <code>http://</code>, <code>https://</code>, <code>socks5://</code>, <code>socks4://</code>.</p>
+      </div>
+      <div id="cp-result" style="display:none"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" onclick="closeChangeProxy()">Cancel</button>
+      <button class="btn btn-primary" id="cp-btn" onclick="submitChangeProxy()">&#9889; Test &amp; Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: New client on existing gateway -->
     <div class="modal-body">
       <p class="text-sm text-dim" style="margin-bottom:14px">Generate a separate .ovpn config for another device (phone, tablet, laptop) using the same proxy tunnel.</p>
       <div class="fg">
@@ -659,6 +688,7 @@ function toast(msg, type){
   setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),300);},4000);
 }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtBytes(n){ n=Number(n)||0; if(n<1024) return n+' B'; const u=['KB','MB','GB','TB']; let i=-1; do{ n/=1024; i++; }while(n>=1024&&i<u.length-1); return n.toFixed(n<10?2:1)+' '+u[i]; }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 async function init(){
@@ -692,13 +722,61 @@ function renderDash(){
   const myGws=_me.my_gateways||[];
   const myClients=_me.vpn_clients||[];
   const expires=_me.expires_at?new Date(_me.expires_at):null;
+  const limitGb = _me.bandwidth_limit_gb || null;
   document.getElementById('dash-stats').innerHTML = `
     <div class="stat-card"><div class="v text-purple">${myGws.length}</div><div class="l">My VPN Tunnels</div></div>
     <div class="stat-card"><div class="v text-blue">${myClients.length}</div><div class="l">VPN Configs</div></div>
+    <div class="stat-card"><div class="v" id="dash-bw-total" style="color:var(--bl2)">—</div><div class="l">Bandwidth Used${limitGb?` / ${limitGb} GB`:''}</div></div>
     <div class="stat-card"><div class="v" style="color:${expires&&expires<new Date()?'var(--rd)':'var(--gr)'}">${expires?expires.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'No Limit'}</div><div class="l">Expires</div></div>`;
   const pLabels={check_proxy:'Proxy Checker',view_gateways:'View Gateways',vpn_clients:'OpenVPN Configs',l2tp_credentials:'L2TP/IPSec',create_gateway:'Create VPN Tunnel'};
   const perms = p.map(x=>`<span class="badge bp" style="margin:2px">${esc(pLabels[x]||x)}</span>`).join('');
   document.getElementById('dash-perms').innerHTML = perms||'<span class="badge bd">No permissions</span>';
+  loadUsage();
+}
+
+// ── Bandwidth usage (Dashboard) ───────────────────────────────────────────────
+let _usageTimer = null;
+async function loadUsage(){
+  const box = document.getElementById('dash-usage');
+  if(!box) return;
+  try {
+    const u = await fetchC('/api/customer/usage');
+    const tot = document.getElementById('dash-bw-total');
+    if (tot) tot.textContent = fmtBytes(u.total_bytes);
+    if(!u.gateways || !u.gateways.length){
+      box.innerHTML = '<div class="text-dim text-sm">No VPN tunnels yet — add a proxy to start tracking bandwidth.</div>';
+    } else {
+      const limit = u.limit_bytes || 0;
+      const pct = limit ? Math.min(100, (u.total_bytes/limit)*100) : 0;
+      const bar = limit ? `<div class="prog" style="margin-top:8px;height:8px;background:var(--s3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${pct>90?'var(--rd)':pct>70?'var(--or)':'var(--gr)'}"></div></div><div class="text-xs text-dim" style="margin-top:4px">${fmtBytes(u.total_bytes)} of ${fmtBytes(limit)} (${pct.toFixed(1)}%)</div>` : '';
+      const rows = u.gateways.map(g => `
+        <tr>
+          <td><b>${esc(g.name)}</b> ${g.running?'<span class="badge bg" style="font-size:10px;margin-left:4px">running</span>':'<span class="badge br" style="font-size:10px;margin-left:4px">stopped</span>'}</td>
+          <td class="text-xs">${esc(g.country||'—')}</td>
+          <td class="text-xs mono">${esc(g.exit_ip||'—')}</td>
+          <td class="text-xs" style="text-align:right">${fmtBytes(g.rx_bytes)}</td>
+          <td class="text-xs" style="text-align:right">${fmtBytes(g.tx_bytes)}</td>
+          <td class="text-xs" style="text-align:right"><b>${fmtBytes(g.total_bytes)}</b></td>
+        </tr>`).join('');
+      box.innerHTML = `
+        ${bar}
+        <div style="overflow-x:auto;margin-top:10px">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr style="text-align:left;color:var(--t3);font-size:11px;text-transform:uppercase">
+              <th style="padding:6px 8px">VPN Tunnel</th><th style="padding:6px 8px">Country</th><th style="padding:6px 8px">Exit IP</th>
+              <th style="padding:6px 8px;text-align:right">Down (RX)</th><th style="padding:6px 8px;text-align:right">Up (TX)</th><th style="padding:6px 8px;text-align:right">Total</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div class="text-xs text-dim" style="margin-top:8px">${esc(u.note||'')}</div>`;
+    }
+  } catch(e){ box.innerHTML = `<div class="text-dim text-sm" style="color:var(--rd)">${esc(e.message)}</div>`; }
+  // Auto-refresh on the dashboard tab only
+  if (_usageTimer) clearTimeout(_usageTimer);
+  if (document.getElementById('sec-home')?.classList.contains('active')) {
+    _usageTimer = setTimeout(loadUsage, 15000);
+  }
 }
 
 // ── Navigation ─────────────────────────────────────────────────────────────────
@@ -777,6 +855,7 @@ async function loadProxies(){
                 : `<button class="btn btn-xs" onclick="cToggleMitm('${esc(g.name)}',false)">MITM</button>`}
               <button class="btn btn-xs ${running?'btn-warn':'btn-green'}" onclick="cToggleGw('${esc(g.name)}',${running})">${running?'&#9632; Stop':'&#9654; Start'}</button>
               <button class="btn btn-xs" onclick="cRestartGw('${esc(g.name)}')">&#8635;</button>
+              <button class="btn btn-xs btn-purple" title="Change upstream proxy" onclick="openChangeProxy('${esc(g.name)}','${esc(g.proxy_display||'')}')">&#128257; Change Proxy</button>
               <a href="/g?name=${encodeURIComponent(g.name)}&api_key=${encodeURIComponent(_key)}" target="_blank" class="btn btn-xs" style="background:rgba(61,126,248,.12);border-color:rgba(61,126,248,.25);color:var(--bl2)">&#127760; Manage</a>
               <button class="btn btn-xs btn-danger" onclick="deleteGateway('${esc(g.name)}')">&#128465;</button>
             </div>
@@ -832,6 +911,38 @@ async function submitAddProxy(){
 }
 function downloadAddOvpn(){ dlFile(_addOvpnContent,_addOvpnName); }
 function copyAddOvpn(){ navigator.clipboard.writeText(_addOvpnContent).then(()=>toast('Copied!')); }
+
+// ── Change proxy on existing tunnel ───────────────────────────────────────────
+function openChangeProxy(name, currentDisplay){
+  document.getElementById('cp-name').value = name;
+  document.getElementById('cp-current').value = currentDisplay || '';
+  document.getElementById('cp-new').value = '';
+  document.getElementById('cp-result').style.display = 'none';
+  const btn = document.getElementById('cp-btn');
+  btn.disabled = false; btn.innerHTML = '&#9889; Test &amp; Apply';
+  document.getElementById('change-proxy-modal').classList.add('open');
+}
+function closeChangeProxy(){ document.getElementById('change-proxy-modal').classList.remove('open'); }
+async function submitChangeProxy(){
+  const name = document.getElementById('cp-name').value;
+  const url  = document.getElementById('cp-new').value.trim();
+  if(!url){ toast('Enter a new proxy URL','err'); return; }
+  const btn = document.getElementById('cp-btn');
+  const out = document.getElementById('cp-result');
+  btn.disabled = true; btn.textContent = 'Testing & restarting…';
+  out.style.display = 'block';
+  out.innerHTML = '<div class="alert alert-info">Testing the new proxy and restarting the tunnel…</div>';
+  try {
+    const d = await fetchC(`/api/customer/proxy/${encodeURIComponent(name)}`, {
+      method: 'PUT', body: JSON.stringify({ proxy_url: url })
+    });
+    out.innerHTML = `<div class="alert alert-ok">✓ Proxy updated. New exit IP: <b>${esc(d.exit_ip||'pending')}</b> (${esc(d.proxy_scheme||'')})</div>`;
+    toast('Proxy updated');
+    setTimeout(()=>{ closeChangeProxy(); loadProxies(); loadUsage(); }, 1200);
+  } catch(e){
+    out.innerHTML = `<div class="alert alert-err">${esc(e.message)}</div>`;
+  } finally { btn.disabled = false; btn.innerHTML = '&#9889; Test &amp; Apply'; }
+}
 
 // New client on existing gateway
 function openNewClient(gw){
@@ -1209,7 +1320,7 @@ function androidGuide(){ return guideStep(1,'Install OpenVPN for Android','Insta
 function l2tpGuide(){ return `<div style="padding:12px 14px;background:rgba(155,116,245,.07);border:1px solid rgba(155,116,245,.2);border-radius:8px;font-size:12px;color:var(--t2);margin-bottom:16px">&#9432; First, get your L2TP credentials: <b>L2TP / IPSec</b> tab → select a tunnel → copy Server IP, PSK, username & password.</div>`+guideStep('W','Windows','Settings → Network → VPN → <b>Add VPN</b> → Provider: Windows built-in → Type: <b>L2TP/IPsec with pre-shared key</b> → enter Server, PSK, Username, Password.')+guideStep('&#63743;','iPhone / iPad / macOS','Settings → General → VPN → <b>Add VPN Configuration</b> → Type: <b>L2TP</b> → Server, Account, Password, Secret (PSK).')+guideStep('A','Android','Settings → Network → VPN → <b>+</b> → Type: <b>L2TP/IPSec PSK</b> → Server, pre-shared key, Username, Password.'); }
 
 // Close modals on backdrop click
-['add-proxy-modal','new-client-modal','redown-modal','ovpn-modal','l2tp-modal'].forEach(id=>{
+['add-proxy-modal','change-proxy-modal','new-client-modal','redown-modal','ovpn-modal','l2tp-modal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',e=>{ if(e.target===document.getElementById(id)) document.getElementById(id).classList.remove('open'); });
 });
 
