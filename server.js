@@ -760,14 +760,43 @@ app.post('/api/admin/keys/:id/reset-usage', requireVpnToken, (req, res) => {
 app.get('/api/key/me', requireApiKey(), (req, res) => {
   const k = req.apiKey;
   const bwLimit = k.bandwidth_limit_gb ? k.bandwidth_limit_gb * 1024 * 1024 * 1024 : null;
+  // Drop vpn_clients / my_gateways entries pointing to gateways that no longer
+  // exist (admin may have deleted a gateway directly, leaving stale refs).
+  const allGws = gwLoad();
+  const liveClients = (k.vpn_clients || []).filter(c => c && allGws[c.gateway]);
+  const liveOwned  = (k.my_gateways || []).filter(n => allGws[n]);
+  // Persist cleanup so subsequent calls (and admin views) stay consistent.
+  if (liveClients.length !== (k.vpn_clients || []).length || liveOwned.length !== (k.my_gateways || []).length) {
+    try {
+      const ks = keysLoad();
+      if (ks[k.id]) {
+        ks[k.id].vpn_clients = liveClients;
+        ks[k.id].my_gateways = liveOwned;
+        keysSave(ks);
+      }
+    } catch (_) {}
+  }
+  // Union: gateways the key OWNS plus any extras admin granted via allowed_gateways.
+  const ownedSet = new Set([...liveOwned, ...liveClients.map(c => c.gateway)]);
+  const accessibleSet = new Set(ownedSet);
+  if (Array.isArray(k.allowed_gateways)) {
+    for (const n of k.allowed_gateways) if (allGws[n]) accessibleSet.add(n);
+  }
   res.json({
     name: k.name,
     permissions: k.permissions,
     allowed_gateways: k.allowed_gateways,
     expires_at: k.expires_at,
     bandwidth: { used_bytes: k.bandwidth_used_bytes, limit_bytes: bwLimit, limit_gb: k.bandwidth_limit_gb },
+    bandwidth_limit_gb: k.bandwidth_limit_gb || null,
+    bandwidth_used_bytes: k.bandwidth_used_bytes || 0,
     proxy_checks: { used: k.proxy_checks_used, limit: k.proxy_check_limit },
+    proxy_check_limit: k.proxy_check_limit || 0,
+    proxy_checks_used: k.proxy_checks_used || 0,
     last_used_at: k.last_used_at,
+    my_gateways: [...ownedSet],
+    accessible_gateways: [...accessibleSet],
+    vpn_clients: liveClients,
   });
 });
 

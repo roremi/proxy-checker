@@ -722,12 +722,13 @@ function show(id){ const e=document.getElementById(id); if(e){ e.classList.remov
 
 function renderDash(){
   const p=_me.permissions||[];
-  const myGws=_me.my_gateways||[];
+  // Prefer the union list returned by the server (owned + admin-granted).
+  const accessible = _me.accessible_gateways || _me.my_gateways || [];
   const myClients=_me.vpn_clients||[];
   const expires=_me.expires_at?new Date(_me.expires_at):null;
   const limitGb = _me.bandwidth_limit_gb || null;
   document.getElementById('dash-stats').innerHTML = `
-    <div class="stat-card"><div class="v text-purple">${myGws.length}</div><div class="l">My VPN Tunnels</div></div>
+    <div class="stat-card"><div class="v text-purple">${accessible.length}</div><div class="l">My VPN Tunnels</div></div>
     <div class="stat-card"><div class="v text-blue">${myClients.length}</div><div class="l">VPN Configs</div></div>
     <div class="stat-card"><div class="v" id="dash-bw-total" style="color:var(--bl2)">—</div><div class="l">Bandwidth Used${limitGb?` / ${limitGb} GB`:''}</div></div>
     <div class="stat-card"><div class="v" style="color:${expires&&expires<new Date()?'var(--rd)':'var(--gr)'}">${expires?expires.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'No Limit'}</div><div class="l">Expires</div></div>`;
@@ -735,6 +736,18 @@ function renderDash(){
   const perms = p.map(x=>`<span class="badge bp" style="margin:2px">${esc(pLabels[x]||x)}</span>`).join('');
   document.getElementById('dash-perms').innerHTML = perms||'<span class="badge bd">No permissions</span>';
   loadUsage();
+  // Reconcile counts against the live gateway list (handles admin-granted access
+  // and any drift between key state and gateways.json).
+  fetchC('/api/customer/gateways').then(d => {
+    const gws = d && d.gateways || [];
+    const tunEl = document.querySelector('#dash-stats .stat-card:first-child .v');
+    if (tunEl) tunEl.textContent = gws.length;
+    const cfgEl = document.querySelector('#dash-stats .stat-card:nth-child(2) .v');
+    if (cfgEl) {
+      const totalCfg = gws.reduce((a, g) => a + ((g.my_clients || []).length), 0);
+      cfgEl.textContent = totalCfg;
+    }
+  }).catch(()=>{});
 }
 
 // ── Bandwidth usage (Dashboard) ───────────────────────────────────────────────
