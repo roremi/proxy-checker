@@ -162,6 +162,32 @@
 sudo openvpn --config &lt;file&gt;.ovpn</pre>
       </details>
     </div>
+
+    <div class="card">
+      <h2>3. Chống IPv6 leak (quan trọng)</h2>
+      <div class="alert info">
+        File <code>.ovpn</code> đã có sẵn chỉ thị <code>block-ipv6</code> (OpenVPN ≥ 2.5) tự động chặn IPv6 trên client khi VPN kết nối. Nếu kiểm tra <a href="https://ipleak.net" target="_blank" style="color:var(--blue)">ipleak.net</a> vẫn thấy <b>IPv6 lộ IP thật (Vietnam)</b>, hãy tắt IPv6 ở hệ điều hành:
+      </div>
+      <details><summary>Windows</summary>
+        <ol>
+          <li>Settings → Network → Change adapter options.</li>
+          <li>Click chuột phải vào card mạng (Wi-Fi / Ethernet) → <b>Properties</b>.</li>
+          <li>Bỏ tick <b>Internet Protocol Version 6 (TCP/IPv6)</b> → OK.</li>
+        </ol>
+      </details>
+      <details><summary>macOS</summary>
+        <pre>networksetup -setv6off Wi-Fi
+networksetup -setv6off Ethernet</pre>
+      </details>
+      <details><summary>Linux</summary>
+        <pre>sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
+sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
+# Vĩnh viễn: thêm 2 dòng trên vào /etc/sysctl.conf</pre>
+      </details>
+      <details><summary>Android / iOS</summary>
+        Một số client OpenVPN (OpenVPN for Android, OpenVPN Connect) có tuỳ chọn <b>IPv6 → Disable</b> hoặc <b>Block IPv6</b> trong cài đặt VPN profile — bật lên. Nếu không có thì đặt thiết bị ở chế độ chỉ dùng IPv4 (Settings → APN → IPv4 only đối với mạng di động).
+      </details>
+    </div>
   </div>
 
   <!-- TAB: CA CERT -->

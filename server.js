@@ -810,7 +810,11 @@ function buildOvpn(gw, certName) {
   const ta   = fs.readFileSync('/etc/openvpn/server/ta.key', 'utf8').trim();
   const certMatch = cert.match(/-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----/);
   const certClean = certMatch ? certMatch[0].trim() : cert.trim();
-  return `client\ndev tun\nproto udp\nremote ${SERVER_IP} ${gw.vpn_port}\nresolv-retry infinite\nnobind\npersist-key\npersist-tun\nremote-cert-tls server\ncipher AES-256-GCM\nauth SHA256\ncompress lz4-v2\nverb 3\nkey-direction 1\n<ca>\n${ca}\n</ca>\n<cert>\n${certClean}\n</cert>\n<key>\n${key}\n</key>\n<tls-auth>\n${ta}\n</tls-auth>\n`;
+  // IPv6 leak prevention on the client side (OpenVPN >= 2.5):
+  //   block-ipv6                — install client-side firewall rule dropping all IPv6
+  //   pull-filter ignore ipv6   — ignore any IPv6 push from the server (defensive)
+  // Server is IPv4-only over a SOCKS5 upstream, so IPv6 must never bypass the tunnel.
+  return `client\ndev tun\nproto udp\nremote ${SERVER_IP} ${gw.vpn_port}\nresolv-retry infinite\nnobind\npersist-key\npersist-tun\nremote-cert-tls server\ncipher AES-256-GCM\nauth SHA256\ncompress lz4-v2\nverb 3\nkey-direction 1\nblock-ipv6\npull-filter ignore "ifconfig-ipv6"\npull-filter ignore "route-ipv6"\n<ca>\n${ca}\n</ca>\n<cert>\n${certClean}\n</cert>\n<key>\n${key}\n</key>\n<tls-auth>\n${ta}\n</tls-auth>\n`;
 }
 
 // GET /api/customer/gateways — list accessible gateways + this key's VPN clients per gateway
@@ -1647,6 +1651,7 @@ ifconfig-pool-persist ${gwPath}/ipp.txt
 push "redirect-gateway def1 bypass-dhcp"
 push "dhcp-option DNS 10.${100 + vpnIdx}.0.1"
 push "block-outside-dns"
+push "block-ipv6"
 compress lz4-v2
 mute 10
 keepalive 10 120
