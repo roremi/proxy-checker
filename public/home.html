@@ -19,7 +19,7 @@ a{text-decoration:none;color:inherit}
 @keyframes load{0%{width:0%}60%{width:80%}100%{width:100%}}
 .loader-text{font-size:13px;color:var(--t3);margin-top:12px;letter-spacing:.06em}
 /* Navbar */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 40px;height:60px;display:flex;align-items:center;gap:20px;border-bottom:1px solid transparent;transition:.3s all;backdrop-filter:blur(0px)}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 40px;height:60px;display:flex;align-items:center;gap:20px;border-bottom:1px solid transparent;transition:.3s background,.3s border-color;backdrop-filter:blur(0px)}
 nav.scrolled{background:rgba(6,12,24,.92);border-bottom-color:var(--b1);backdrop-filter:blur(16px)}
 .nav-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:16px}
 .nav-icon{width:34px;height:34px;background:linear-gradient(135deg,#3d7ef8,#9b74f5);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 4px 12px rgba(61,126,248,.3)}
@@ -27,6 +27,16 @@ nav.scrolled{background:rgba(6,12,24,.92);border-bottom-color:var(--b1);backdrop
 .nav-links a{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;color:var(--t2);transition:.15s}
 .nav-links a:hover{background:var(--s2);color:var(--t1)}
 .nav-cta{display:flex;gap:8px;align-items:center}
+/* Burger (mobile) */
+.burger{display:none;background:transparent;border:1px solid var(--b2);border-radius:8px;width:40px;height:38px;cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;color:var(--t1);font-size:20px;padding:0;font-family:inherit}
+.burger:hover{background:var(--s2);border-color:var(--bl)}
+.mobile-drawer{position:fixed;inset:60px 0 0 0;background:rgba(6,12,24,.98);backdrop-filter:blur(20px);z-index:99;transform:translateY(-110%);transition:transform .25s ease;padding:24px 22px;display:flex;flex-direction:column;gap:6px;overflow-y:auto;border-bottom:1px solid var(--b1)}
+.mobile-drawer.open{transform:translateY(0)}
+.mobile-drawer a.mlink{padding:14px 12px;border-radius:9px;font-size:15px;font-weight:600;color:var(--t1);border:1px solid transparent;display:block}
+.mobile-drawer a.mlink:hover,.mobile-drawer a.mlink:active{background:var(--s2);border-color:var(--b1)}
+.mobile-drawer .m-divider{height:1px;background:var(--b1);margin:10px 0 6px}
+.mobile-drawer .m-cta{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.mobile-drawer .m-cta .btn{width:100%;justify-content:center;padding:13px}
 /* Buttons */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s all;font-family:inherit;border:1px solid transparent;white-space:nowrap}
 .btn-primary{background:var(--bl);color:#fff;border-color:var(--bl);box-shadow:0 4px 20px rgba(61,126,248,.35)}
@@ -188,16 +198,66 @@ footer .brand{font-weight:800;font-size:16px;color:var(--t1);margin-bottom:8px}
 @keyframes shimmer2{0%{background-position:-400px 0}100%{background-position:400px 0}}
 .skel2{background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 50%,var(--s2) 100%);background-size:400px 100%;animation:shimmer2 1.2s ease-in-out infinite;border-radius:6px}
 /* Responsive */
+@media(max-width:1024px){
+  nav{padding:0 24px;gap:14px}
+  section{padding:80px 28px}
+  #hero{padding:90px 28px 50px}
+  .hero h1{font-size:42px}
+  .hero-grid{gap:40px}
+}
+@media(max-width:860px){
+  .nav-links{display:none}
+  .burger{display:inline-flex}
+  /* Compact CTA on tablet — only show Login + Manage when applicable; hide Admin */
+  .nav-cta a[href="/login"]{display:none}
+}
 @media(max-width:768px){
-  .hero-grid{grid-template-columns:1fr;gap:40px}
-  .hero h1{font-size:34px}
-  nav{padding:0 20px}
-  section{padding:60px 20px}
-  #hero{padding:80px 20px 50px}
+  nav{padding:0 16px;gap:10px}
+  .nav-logo{font-size:15px}
+  .nav-icon{width:32px;height:32px;font-size:15px}
+  .nav-cta{gap:6px}
+  .nav-cta .btn-sm{padding:6px 12px;font-size:12px}
+  #nav-user-chip{display:none !important}
+  section{padding:64px 18px}
+  #hero{padding:84px 18px 44px;min-height:auto}
+  .hero-grid{grid-template-columns:1fr;gap:32px}
+  .hero h1{font-size:34px;line-height:1.15}
+  .hero p{font-size:15px;max-width:none}
+  .hero-btns{gap:10px}
+  .hero-btns .btn{flex:1 1 auto;min-width:140px;justify-content:center}
+  .hero-stats{gap:20px;margin-top:28px}
+  .hero-stat .n{font-size:20px}
+  .glow{filter:blur(70px);opacity:.18}
+  .glow-1,.glow-2{width:380px;height:380px}
+  .glow-3{width:300px;height:300px}
+  .flow-steps{grid-template-columns:1fr;gap:18px;margin-top:36px}
   .flow-steps::before{display:none}
-  .sec-title{font-size:26px}
-  #cta h2{font-size:28px}
-  .tunnel-grid{grid-template-columns:1fr}
+  .flow-step{text-align:left;padding:0;display:flex;gap:14px;align-items:flex-start}
+  .features-grid,.proto-grid,.pricing-grid{grid-template-columns:1fr;gap:14px;margin-top:36px}
+  .proto-card{padding:18px;gap:12px}
+  .price-card{padding:22px}
+  .tunnel-grid{grid-template-columns:1fr;gap:12px}
+  .sec-title{font-size:24px;line-height:1.25}
+  .sec-sub{font-size:14px}
+  #cta h2{font-size:26px;line-height:1.2}
+  #cta p{font-size:14px}
+  #cta .cta-btns{flex-direction:column}
+  #cta .cta-btns .btn{width:100%;justify-content:center}
+  footer{padding:28px 18px;font-size:12px}
+  .btn-lg{padding:12px 22px;font-size:14px}
+  /* Modal: full-screen on phones */
+  .l2tp-box{max-width:100%;margin:8px;border-radius:12px;max-height:calc(100vh - 16px);overflow-y:auto}
+}
+@media(max-width:420px){
+  nav{padding:0 12px}
+  #nav-brand{display:none}
+  .nav-cta a[href="/portal"]{padding:6px 10px;font-size:12px}
+  .hero h1{font-size:28px}
+  section{padding:54px 14px}
+  #hero{padding:78px 14px 40px}
+  .hero-tag{font-size:11px}
+  .hero-stats{gap:14px}
+  .hero-stat{flex:1 1 40%}
 }
 </style>
 </head>
@@ -232,8 +292,24 @@ footer .brand{font-weight:800;font-size:16px;color:var(--t1);margin-bottom:8px}
     <a href="/login" class="btn btn-outline btn-sm">Admin</a>
     <a href="/portal" class="btn btn-outline btn-sm" id="nav-btn-login">&#128273; Login</a>
     <a href="/portal-app" class="btn btn-primary btn-sm" id="nav-btn-manage" style="display:none">&#128421; Manage My VPN</a>
+    <button class="burger" id="burger" aria-label="Open menu" aria-expanded="false" onclick="toggleDrawer()">&#9776;</button>
   </div>
 </nav>
+
+<!-- Mobile drawer -->
+<div class="mobile-drawer" id="mobile-drawer">
+  <a href="#features"     class="mlink" onclick="closeDrawer()">Features</a>
+  <a href="#how-it-works" class="mlink" onclick="closeDrawer()">How It Works</a>
+  <a href="#protocols"    class="mlink" onclick="closeDrawer()">Protocols</a>
+  <a href="#setup"        class="mlink" onclick="closeDrawer()">Setup Guide</a>
+  <a href="#pricing"      class="mlink" onclick="closeDrawer()">Pricing</a>
+  <div class="m-divider"></div>
+  <div class="m-cta">
+    <a href="/portal"     class="btn btn-outline" id="m-btn-login"  onclick="closeDrawer()">&#128273; Customer Login</a>
+    <a href="/portal-app" class="btn btn-primary" id="m-btn-manage" style="display:none" onclick="closeDrawer()">&#128421; Manage My VPN</a>
+    <a href="/login"      class="btn btn-outline" onclick="closeDrawer()">Admin Panel</a>
+  </div>
+</div>
 
 <!-- Hero -->
 <section id="hero">
@@ -562,6 +638,10 @@ async function initPage() {
         const d = await r.json();
         document.getElementById('nav-btn-login').style.display = 'none';
         document.getElementById('nav-btn-manage').style.display = '';
+        const mLogin  = document.getElementById('m-btn-login');
+        const mManage = document.getElementById('m-btn-manage');
+        if (mLogin)  mLogin.style.display  = 'none';
+        if (mManage) mManage.style.display = '';
         document.getElementById('hero-btn-login').style.display = 'none';
         document.getElementById('hero-btn-manage').style.display = '';
         document.getElementById('cta-btn-login').style.display = 'none';
@@ -758,6 +838,27 @@ window.addEventListener('load', () => { initPage(); });
 window.addEventListener('scroll', () => {
   document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 40);
 });
+
+// Mobile drawer
+function toggleDrawer(){
+  const d = document.getElementById('mobile-drawer');
+  const b = document.getElementById('burger');
+  const open = d.classList.toggle('open');
+  b.setAttribute('aria-expanded', open ? 'true' : 'false');
+  b.innerHTML = open ? '\u2715' : '\u2630';
+  document.body.style.overflow = open ? 'hidden' : '';
+}
+function closeDrawer(){
+  const d = document.getElementById('mobile-drawer');
+  if (!d.classList.contains('open')) return;
+  d.classList.remove('open');
+  const b = document.getElementById('burger');
+  b.setAttribute('aria-expanded','false');
+  b.innerHTML = '\u2630';
+  document.body.style.overflow = '';
+}
+// Close drawer if viewport grows past mobile breakpoint
+window.addEventListener('resize', () => { if (window.innerWidth > 860) closeDrawer(); });
 
 // ── Scroll animations ──────────────────────────────────────────────────────────
 const observer = new IntersectionObserver((entries) => {
