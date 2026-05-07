@@ -562,6 +562,9 @@ textarea{resize:vertical}
 </div>
 
 <!-- Modal: New client on existing gateway -->
+<div class="overlay" id="new-client-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="new-client-title">Add Device</h3><button class="close-btn" onclick="closeNewClient()">&#215;</button></div>
     <div class="modal-body">
       <p class="text-sm text-dim" style="margin-bottom:14px">Generate a separate .ovpn config for another device (phone, tablet, laptop) using the same proxy tunnel.</p>
       <div class="fg">
