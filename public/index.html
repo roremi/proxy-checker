@@ -3,18 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Proxy Checker — BrowserLeaks</title>
+<title>Proxy Checker - VPN Panel</title>
 <style>
 :root {
-  --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
-  --border: #30363d; --text: #c9d1d9; --dim: #8b949e;
-  --green: #3fb950; --red: #f85149; --yellow: #d29922;
-  --blue: #58a6ff; --purple: #bc8cff;
+  --bg: #0a0f1e; --surface: #0d1525; --surface2: #111e33;
+  --border: #1a2f4a; --text: #e4eaf4; --dim: #8fa8c8;
+  --green: #16c87a; --red: #f04a4a; --yellow: #f59e0b;
+  --blue: #3d7ef8; --purple: #9b74f5;
   --r: 8px; --mono: 'SFMono-Regular',Consolas,'Liberation Mono',monospace;
+  --sb:#060c18;--s2:#111e33;--s3:#16263e;--b1:#1a2f4a;--b2:#1f3a5a;--t1:#e4eaf4;--t2:#8fa8c8;--t3:#4a6080;--bl:#3d7ef8;--bl2:#6da0fa;--gr:#16c87a;--sw:220px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5;display:flex;min-height:100vh}
+/* Sidebar */
+.sb{width:var(--sw);flex-shrink:0;background:var(--sb);border-right:1px solid var(--b1);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:50;overflow:hidden}
+.sb-logo{padding:18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1);flex-shrink:0}
+.sb-icon{width:36px;height:36px;background:linear-gradient(135deg,#3d7ef8,#6da0fa);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 4px 12px rgba(61,126,248,.3)}
+.sb-name{font-weight:700;font-size:14px;color:var(--t1);line-height:1.2}.sb-ver{font-size:10px;color:var(--t3);margin-top:1px}
+.sb-nav{flex:1;padding:10px 8px;overflow-y:auto}.nav-sep{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:10px 8px 4px}
+.nav-a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;color:var(--t2);font-size:13px;font-weight:500;margin-bottom:1px;transition:.15s all;cursor:pointer;border:1px solid transparent;text-decoration:none}
+.nav-a:hover{background:var(--s2);color:var(--t1)}.nav-a.active{background:rgba(61,126,248,.12);color:var(--bl2);border-color:rgba(61,126,248,.18)}
+.nav-a svg{width:16px;height:16px;flex-shrink:0;opacity:.7}.nav-a.active svg{opacity:1}
+.sb-foot{padding:10px 8px;border-top:1px solid var(--b1);flex-shrink:0}.sb-foot .nav-a{width:100%;background:none;border:none;font-family:inherit}
+/* Main area */
+.main-wrap{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-width:0}
 code{font-family:var(--mono);font-size:12px;background:var(--surface2);padding:1px 5px;border-radius:3px}
 /* Header */
 .hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
@@ -142,18 +154,30 @@ td.mono{font-family:var(--mono);font-size:11px}
 </style>
 </head>
 <body>
-
+<aside class="sb">
+  <div class="sb-logo"><div class="sb-icon">&#9889;</div><div><div class="sb-name" id="brand">VPN Panel</div><div class="sb-ver">Admin Console</div></div></div>
+  <nav class="sb-nav">
+    <div class="nav-sep">Overview</div>
+    <a href="/dashboard" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
+    <div class="nav-sep">Management</div>
+    <a href="/gateways" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Gateways</a>
+    <a href="/keys" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Customers</a>
+    <a href="/l2tp" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>L2TP / IPSec</a>
+    <div class="nav-sep">Tools</div>
+    <a href="/index" class="nav-a active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Proxy Checker</a>
+    <a href="/captures" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3L14.5 4z"/><circle cx="12" cy="13" r="3"/></svg>Captures</a>
+    <div class="nav-sep">System</div>
+    <a href="/settings" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+  </nav>
+  <div class="sb-foot"><button onclick="logout()" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button></div>
+</aside>
+<div class="main-wrap">
 <div class="hdr">
   <div class="hdr-logo">
     <svg width="20" height="20" fill="#58a6ff" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
     Proxy Checker
   </div>
-  <nav class="hdr-nav">
-    <a href="/" class="active">Checker</a>
-    <a href="/gateways.html">Gateways</a>
-    <a href="/captures.html">Captures</a>
-  </nav>
-  <div class="hdr-sub">Fingerprint analysis via BrowserLeaks</div>
+  <div class="hdr-sub" style="margin-left:auto">Fingerprint analysis via BrowserLeaks</div>
 </div>
 
 <div class="wrap">
@@ -760,6 +784,15 @@ function exportCsv(){
   a.download=`proxies-${new Date().toISOString().slice(0,16).replace(/:/g,'-')}.csv`;
   document.body.appendChild(a);a.click();a.remove();
 }
+// Auth
+const _tok = localStorage.getItem('_admin_token');
+if (!_tok) location.replace('/login');
+function logout() { localStorage.removeItem('_admin_token'); location.replace('/login'); }
+// Brand
+(async function loadBrand() {
+  try { const d = await fetch('/api/admin/settings',{headers:{'x-vpn-token':_tok}}).then(r=>r.json()); document.getElementById('brand').textContent = d.brand_name||'VPN Panel'; } catch(_) {}
+})();
 </script>
+</div><!-- end main-wrap -->
 </body>
 </html>

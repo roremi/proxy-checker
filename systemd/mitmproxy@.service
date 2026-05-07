@@ -1,0 +1,32 @@
+[Unit]
+Description=mitmproxy transparent intercept for gateway %i
+After=network-online.target tun2socks@%i.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Run as per-gateway user so iptables owner-match → fwmark routes outbound
+# traffic of THIS mitmproxy instance through THIS gateway's tun2socks tunnel.
+User=mitm-%i
+Group=mitm-%i
+EnvironmentFile=/etc/openvpn/gateways/%i/mitm.env
+Environment=HOME=/var/lib/mitmproxy
+WorkingDirectory=/var/lib/mitmproxy
+# Shared CA dir so users install ONE cert for all gateways
+ExecStart=/usr/local/bin/mitmdump \
+    --mode transparent \
+    --listen-host 0.0.0.0 \
+    --listen-port ${MITM_PORT} \
+    --set confdir=/etc/openvpn/mitm-ca \
+    --set block_global=false \
+    --set ssl_insecure=true --set tls_version_client_min=TLS1 --set tls_version_server_min=TLS1 --set http2=true --set client_replay_concurrency=1 \
+    --set termlog_verbosity=warn \
+    --set flow_detail=0 \
+    -s /etc/openvpn/gateways/capture-addon.py
+Restart=on-failure
+RestartSec=3
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

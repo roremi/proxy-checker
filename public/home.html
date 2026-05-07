@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proxy to VPN — Turn Any Proxy Into a VPN</title>
+<style>
+:root{--bg:#0a0f1e;--s1:#0d1525;--s2:#111e33;--s3:#16263e;--b1:#1a2f4a;--b2:#1f3a5a;--t1:#e4eaf4;--t2:#8fa8c8;--t3:#4a6080;--bl:#3d7ef8;--bl2:#6da0fa;--gr:#16c87a;--rd:#f04a4a;--or:#f59e0b;--pu:#9b74f5}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:15px;overflow-x:hidden}
+a{text-decoration:none;color:inherit}
+/* Loading Screen */
+#loader{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .5s,visibility .5s}
+#loader.hide{opacity:0;visibility:hidden;pointer-events:none}
+.loader-icon{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#3d7ef8,#9b74f5);display:flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:24px;animation:pulse 1.2s ease-in-out infinite;box-shadow:0 0 40px rgba(61,126,248,.4)}
+@keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 40px rgba(61,126,248,.4)}50%{transform:scale(1.08);box-shadow:0 0 60px rgba(61,126,248,.7)}}
+.loader-bar{width:200px;height:3px;background:var(--s3);border-radius:3px;overflow:hidden;margin-top:16px}
+.loader-bar-inner{height:100%;background:linear-gradient(90deg,var(--bl),var(--pu));border-radius:3px;animation:load 1.4s ease-in-out forwards}
+@keyframes load{0%{width:0%}60%{width:80%}100%{width:100%}}
+.loader-text{font-size:13px;color:var(--t3);margin-top:12px;letter-spacing:.06em}
+/* Navbar */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 40px;height:60px;display:flex;align-items:center;gap:20px;border-bottom:1px solid transparent;transition:.3s all;backdrop-filter:blur(0px)}
+nav.scrolled{background:rgba(6,12,24,.92);border-bottom-color:var(--b1);backdrop-filter:blur(16px)}
+.nav-logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:16px}
+.nav-icon{width:34px;height:34px;background:linear-gradient(135deg,#3d7ef8,#9b74f5);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 4px 12px rgba(61,126,248,.3)}
+.nav-links{display:flex;gap:6px;flex:1;justify-content:center}
+.nav-links a{padding:7px 14px;border-radius:7px;font-size:13px;font-weight:500;color:var(--t2);transition:.15s}
+.nav-links a:hover{background:var(--s2);color:var(--t1)}
+.nav-cta{display:flex;gap:8px;align-items:center}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 20px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s all;font-family:inherit;border:1px solid transparent;white-space:nowrap}
+.btn-primary{background:var(--bl);color:#fff;border-color:var(--bl);box-shadow:0 4px 20px rgba(61,126,248,.35)}
+.btn-primary:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 6px 28px rgba(61,126,248,.45)}
+.btn-outline{background:transparent;color:var(--t1);border-color:var(--b2)}
+.btn-outline:hover{background:var(--s2);border-color:var(--bl)}
+.btn-lg{padding:13px 28px;font-size:15px;border-radius:11px}
+.btn-sm{padding:6px 14px;font-size:13px;border-radius:7px}
+/* Sections */
+section{padding:90px 40px}
+.container{max-width:1100px;margin:0 auto}
+/* Hero */
+#hero{min-height:100vh;display:flex;align-items:center;position:relative;overflow:hidden;padding:100px 40px 60px}
+.hero-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.glow{position:absolute;border-radius:50%;filter:blur(100px);opacity:.25}
+.glow-1{width:600px;height:600px;background:radial-gradient(circle,#3d7ef8,transparent);top:-100px;left:-100px;animation:float1 8s ease-in-out infinite}
+.glow-2{width:500px;height:500px;background:radial-gradient(circle,#9b74f5,transparent);bottom:-100px;right:-100px;animation:float2 10s ease-in-out infinite}
+.glow-3{width:400px;height:400px;background:radial-gradient(circle,#16c87a,transparent);top:50%;left:50%;transform:translate(-50%,-50%);animation:float3 12s ease-in-out infinite}
+@keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,30px)}}
+@keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-30px,-40px)}}
+@keyframes float3{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.15)}}
+.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;position:relative;z-index:1}
+.hero-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(61,126,248,.1);border:1px solid rgba(61,126,248,.2);padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;color:var(--bl2);margin-bottom:20px}
+.hero-tag .dot{width:6px;height:6px;background:var(--gr);border-radius:50%;animation:blink 1.5s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.hero h1{font-size:52px;font-weight:900;line-height:1.1;margin-bottom:20px;letter-spacing:-.02em}
+.hero h1 .hl{background:linear-gradient(135deg,#3d7ef8,#9b74f5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{font-size:17px;color:var(--t2);line-height:1.7;margin-bottom:32px;max-width:480px}
+.hero-btns{display:flex;gap:12px;flex-wrap:wrap}
+.hero-stats{display:flex;gap:24px;margin-top:36px;flex-wrap:wrap}
+.hero-stat .n{font-size:22px;font-weight:800;background:linear-gradient(135deg,var(--bl2),var(--pu));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-stat .l{font-size:11px;color:var(--t3);text-transform:uppercase;font-weight:600;letter-spacing:.05em}
+/* Terminal demo */
+.terminal{background:#060c18;border:1px solid var(--b2);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.terminal-bar{padding:12px 16px;background:var(--s1);border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:6px}
+.tb{width:12px;height:12px;border-radius:50%}
+.tb-r{background:#f04a4a}.tb-y{background:#f59e0b}.tb-g{background:#16c87a}
+.terminal-title{flex:1;text-align:center;font-size:12px;color:var(--t3)}
+.terminal-body{padding:20px;font-family:monospace;font-size:13px;line-height:1.8;min-height:220px}
+.t-dim{color:var(--t3)}.t-green{color:var(--gr)}.t-blue{color:var(--bl2)}.t-orange{color:var(--or)}.t-purple{color:var(--pu)}
+.t-cursor{display:inline-block;width:8px;height:14px;background:var(--bl2);margin-left:1px;animation:cursor .9s step-end infinite;vertical-align:middle}
+@keyframes cursor{0%,100%{opacity:1}50%{opacity:0}}
+/* Flow section */
+.flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;position:relative;margin-top:50px}
+.flow-steps::before{content:'';position:absolute;top:36px;left:10%;right:10%;height:2px;background:linear-gradient(90deg,var(--bl),var(--pu));z-index:0;opacity:.3}
+.flow-step{text-align:center;position:relative;z-index:1;padding:0 16px}
+.flow-num{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--s2),var(--s3));border:2px solid var(--b2);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:28px;position:relative;transition:.3s}
+.flow-step:hover .flow-num{border-color:var(--bl);box-shadow:0 0 30px rgba(61,126,248,.3);transform:scale(1.05)}
+.flow-step-n{position:absolute;top:-6px;right:-6px;width:22px;height:22px;background:var(--bl);border-radius:50%;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.flow-step h3{font-size:14px;font-weight:700;margin-bottom:6px}
+.flow-step p{font-size:12px;color:var(--t3);line-height:1.6}
+/* Features */
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:50px}
+.feat-card{background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:24px;transition:.25s all;position:relative;overflow:hidden}
+.feat-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--card-color,#3d7ef8) 0%,transparent 60%);opacity:0;transition:.25s}
+.feat-card:hover{border-color:var(--card-color,var(--bl));transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.3)}
+.feat-card:hover::before{opacity:.04}
+.feat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;border:1px solid}
+.feat-card h3{font-size:15px;font-weight:700;margin-bottom:8px}
+.feat-card p{font-size:13px;color:var(--t2);line-height:1.7}
+.feat-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:12px}
+.feat-tag{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(61,126,248,.1);color:var(--bl2);border:1px solid rgba(61,126,248,.15)}
+/* Section header */
+.sec-tag{display:inline-block;padding:4px 12px;background:rgba(61,126,248,.1);border:1px solid rgba(61,126,248,.2);border-radius:20px;font-size:12px;font-weight:600;color:var(--bl2);margin-bottom:14px}
+.sec-title{font-size:36px;font-weight:800;margin-bottom:14px;letter-spacing:-.02em}
+.sec-sub{font-size:16px;color:var(--t2);max-width:560px;line-height:1.7}
+/* Protocols */
+.proto-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:50px}
+.proto-card{background:var(--s1);border:1px solid var(--b1);border-radius:14px;padding:24px;display:flex;gap:16px;align-items:flex-start;transition:.2s}
+.proto-card:hover{border-color:var(--b2);background:var(--s2)}
+.proto-badge{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.proto-card h3{font-size:14px;font-weight:700;margin-bottom:5px}
+.proto-card p{font-size:12px;color:var(--t2);line-height:1.6}
+.proto-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;margin-top:8px}
+/* Setup Guide */
+#setup{background:var(--s1)}
+.platform-tabs{display:flex;gap:6px;margin-bottom:24px;flex-wrap:wrap}
+.ptab{padding:8px 16px;border-radius:8px;border:1px solid var(--b1);background:transparent;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;transition:.15s;font-family:inherit;display:flex;align-items:center;gap:6px}
+.ptab.active{background:var(--bl);border-color:var(--bl);color:#fff}
+.ptab:hover:not(.active){background:var(--s2);color:var(--t1)}
+.platform-content{display:none}.platform-content.active{display:block}
+.step-list{counter-reset:step}
+.step-item{display:flex;gap:16px;margin-bottom:20px;align-items:flex-start;padding:16px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;transition:.2s}
+.step-item:hover{border-color:var(--b2)}
+.step-circle{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--bl),var(--pu));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0}
+.step-item h4{font-size:13px;font-weight:700;margin-bottom:4px}
+.step-item p{font-size:12px;color:var(--t2);line-height:1.6}
+.code-inline{background:var(--s3);border:1px solid var(--b2);padding:1px 7px;border-radius:4px;font-family:monospace;font-size:12px;color:var(--bl2)}
+.code-block{background:var(--bg);border:1px solid var(--b2);border-radius:8px;padding:12px 14px;font-family:monospace;font-size:12px;color:var(--bl2);line-height:1.8;margin-top:8px;overflow-x:auto}
+.dl-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;background:rgba(22,200,122,.1);border:1px solid rgba(22,200,122,.2);border-radius:6px;font-size:12px;font-weight:600;color:var(--gr);margin-top:8px}
+/* Supported apps */
+.app-grid{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
+.app-chip{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;font-size:13px;font-weight:500;transition:.2s}
+.app-chip:hover{border-color:var(--b2);background:var(--s3)}
+.app-chip-icon{font-size:18px}
+/* Pricing */
+.pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:50px}
+.price-card{background:var(--s1);border:1px solid var(--b1);border-radius:16px;padding:28px;position:relative;transition:.2s}
+.price-card.popular{border-color:var(--bl);box-shadow:0 0 40px rgba(61,126,248,.15)}
+.popular-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--bl);color:#fff;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.price-name{font-size:13px;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.price-amt{font-size:36px;font-weight:900;margin-bottom:4px}.price-period{font-size:13px;color:var(--t3)}
+.price-feats{margin:20px 0;list-style:none}
+.price-feats li{font-size:13px;color:var(--t2);padding:6px 0;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:8px}
+.price-feats li:last-child{border:none}
+.price-feats li::before{content:'✓';color:var(--gr);font-weight:700;flex-shrink:0}
+/* CTA */
+#cta{background:linear-gradient(135deg,rgba(61,126,248,.08),rgba(155,116,245,.06));border-top:1px solid var(--b1);text-align:center}
+#cta h2{font-size:40px;font-weight:900;margin-bottom:14px;letter-spacing:-.02em}
+#cta p{font-size:16px;color:var(--t2);margin-bottom:32px;max-width:500px;margin-left:auto;margin-right:auto;line-height:1.7}
+#cta .cta-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+/* Footer */
+footer{background:var(--sb,#060c18);border-top:1px solid var(--b1);padding:40px;text-align:center;color:var(--t3);font-size:13px}
+footer .brand{font-weight:800;font-size:16px;color:var(--t1);margin-bottom:8px}
+/* Scroll animations */
+.fade-up{opacity:0;transform:translateY(30px);transition:.6s all}
+.fade-up.visible{opacity:1;transform:translateY(0)}
+.fade-up-delay-1{transition-delay:.1s}.fade-up-delay-2{transition-delay:.2s}.fade-up-delay-3{transition-delay:.3s}.fade-up-delay-4{transition-delay:.4s}
+/* Divider */
+.divider{height:1px;background:linear-gradient(90deg,transparent,var(--b2),transparent);margin:0}
+/* Badge */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid}
+.bg{background:rgba(22,200,122,.1);color:#16c87a;border-color:rgba(22,200,122,.2)}
+.bp{background:rgba(155,116,245,.1);color:#9b74f5;border-color:rgba(155,116,245,.2)}
+/* My Tunnels section */
+#my-tunnels{display:none;background:var(--s1);border-top:1px solid var(--b1);border-bottom:1px solid var(--b1)}
+.tunnel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-top:24px}
+.tunnel-card{background:var(--bg);border:1px solid var(--b1);border-radius:12px;overflow:hidden;transition:.2s}
+.tunnel-card:hover{border-color:var(--b2);box-shadow:0 8px 30px rgba(0,0,0,.3)}
+.tunnel-head{padding:14px 16px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:10px}
+.tunnel-dot{width:8px;height:8px;border-radius:50%;background:var(--gr);flex-shrink:0;box-shadow:0 0 6px var(--gr)}
+.tunnel-name{font-size:13px;font-weight:700;flex:1}
+.tunnel-ip{font-size:11px;color:var(--t3);font-family:monospace}
+.tunnel-body{padding:14px 16px}
+.tunnel-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tmeta{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:var(--s2);border:1px solid var(--b1);color:var(--t2)}
+.tunnel-clients{margin-bottom:12px}
+.tunnel-clients-title{font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px}
+.client-row{display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--s2);border:1px solid var(--b1);border-radius:6px;margin-bottom:4px}
+.client-row-name{font-size:12px;font-weight:600;flex:1}
+.tunnel-actions{display:flex;gap:6px;flex-wrap:wrap}
+.ta-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;transition:.15s;text-decoration:none;font-family:inherit;background:transparent}
+.ta-btn-blue{color:var(--bl2);border-color:rgba(61,126,248,.25)}.ta-btn-blue:hover{background:rgba(61,126,248,.1)}
+.ta-btn-green{color:var(--gr);border-color:rgba(22,200,122,.25)}.ta-btn-green:hover{background:rgba(22,200,122,.1)}
+.ta-btn-purple{color:var(--pu);border-color:rgba(155,116,245,.25)}.ta-btn-purple:hover{background:rgba(155,116,245,.1)}
+.ta-btn-orange{color:var(--or);border-color:rgba(245,158,11,.25)}.ta-btn-orange:hover{background:rgba(245,158,11,.1)}
+/* L2TP modal */
+#l2tp-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);opacity:0;visibility:hidden;transition:.2s}
+#l2tp-modal.open{opacity:1;visibility:visible}
+.l2tp-box{background:var(--s1);border:1px solid var(--b2);border-radius:14px;padding:28px;max-width:420px;width:100%;box-shadow:0 30px 80px rgba(0,0,0,.6);transform:scale(.95);transition:.2s}
+#l2tp-modal.open .l2tp-box{transform:scale(1)}
+.l2tp-field{margin-bottom:12px}
+.l2tp-label{font-size:10px;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.l2tp-val{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--b2);border-radius:7px;padding:8px 12px;font-family:monospace;font-size:13px;color:var(--t1)}
+.l2tp-val span{flex:1;word-break:break-all}
+.l2tp-copy{cursor:pointer;color:var(--t3);font-size:14px;flex-shrink:0;transition:.15s;background:none;border:none;padding:0}
+.l2tp-copy:hover{color:var(--bl2)}
+/* Skeleton */
+@keyframes shimmer2{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.skel2{background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 50%,var(--s2) 100%);background-size:400px 100%;animation:shimmer2 1.2s ease-in-out infinite;border-radius:6px}
+/* Responsive */
+@media(max-width:768px){
+  .hero-grid{grid-template-columns:1fr;gap:40px}
+  .hero h1{font-size:34px}
+  nav{padding:0 20px}
+  section{padding:60px 20px}
+  #hero{padding:80px 20px 50px}
+  .flow-steps::before{display:none}
+  .sec-title{font-size:26px}
+  #cta h2{font-size:28px}
+  .tunnel-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loader">
+  <div class="loader-icon" id="loader-icon">&#9889;</div>
+  <div style="font-size:18px;font-weight:800" id="loader-brand">Proxy to VPN</div>
+  <div class="loader-bar" id="loader-bar"><div class="loader-bar-inner"></div></div>
+  <div class="loader-text" id="loader-text">Loading...</div>
+</div>
+
+<!-- Navbar -->
+<nav id="navbar">
+  <div class="nav-logo">
+    <div class="nav-icon">&#9889;</div>
+    <span id="nav-brand">Proxy to VPN</span>
+  </div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#protocols">Protocols</a>
+    <a href="#setup">Setup Guide</a>
+    <a href="#pricing">Pricing</a>
+  </div>
+  <div class="nav-cta">
+    <div id="nav-user-chip" style="display:none;align-items:center;gap:6px;padding:5px 10px;background:rgba(22,200,122,.1);border:1px solid rgba(22,200,122,.2);border-radius:7px;font-size:12px;font-weight:600;color:#16c87a">
+      <span style="width:6px;height:6px;border-radius:50%;background:#16c87a;display:inline-block"></span>
+      <span id="nav-user-info">Connected</span>
+    </div>
+    <a href="/login" class="btn btn-outline btn-sm">Admin</a>
+    <a href="/portal" class="btn btn-outline btn-sm" id="nav-btn-login">&#128273; Login</a>
+    <a href="/portal-app" class="btn btn-primary btn-sm" id="nav-btn-manage" style="display:none">&#128421; Manage My VPN</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="hero-bg">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="glow glow-3"></div>
+  </div>
+  <div class="container">
+    <div class="hero-grid">
+      <div>
+        <div class="hero-tag"><span class="dot"></span> No VPN subscription needed</div>
+        <h1>Turn Any <span class="hl">Proxy</span> Into a Full VPN</h1>
+        <p>Have a proxy but need a real VPN? Paste your proxy URL — we instantly build an encrypted VPN tunnel you can use on <strong>any device</strong>: Windows, macOS, iOS, Android, Linux, routers.</p>
+        <div class="hero-btns">
+          <a href="/portal-app" class="btn btn-primary btn-lg" id="hero-btn-manage" style="display:none">&#128421; Manage My VPN</a>
+          <a href="/portal" class="btn btn-primary btn-lg" id="hero-btn-login">&#9889; Start Free — Use Your Proxy</a>
+          <a href="#how-it-works" class="btn btn-outline btn-lg">See How It Works</a>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat"><div class="n">3</div><div class="l">Protocols</div></div>
+          <div class="hero-stat"><div class="n">&lt; 30s</div><div class="l">Setup Time</div></div>
+          <div class="hero-stat"><div class="n">All OS</div><div class="l">Compatible</div></div>
+          <div class="hero-stat"><div class="n">AES-256</div><div class="l">Encryption</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="terminal">
+          <div class="terminal-bar">
+            <div class="tb tb-r"></div><div class="tb tb-y"></div><div class="tb tb-g"></div>
+            <div class="terminal-title">proxy-to-vpn ~ dashboard</div>
+          </div>
+          <div class="terminal-body" id="terminal-demo">
+            <div class="t-dim">$ Adding proxy tunnel...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- My VPN Tunnels (shown after auth) -->
+<section id="my-tunnels">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="sec-tag">&#128274; My VPN Tunnels</div>
+        <div class="sec-title" style="margin-bottom:4px">Your Active Tunnels</div>
+        <div style="font-size:14px;color:var(--t2)">Manage configs, download .ovpn, view L2TP credentials — no login needed.</div>
+      </div>
+      <a href="/portal-app" class="btn btn-primary btn-sm">&#128421; Full Dashboard</a>
+    </div>
+    <div class="tunnel-grid" id="tunnel-grid">
+      <!-- loaded by JS -->
+    </div>
+  </div>
+</section>
+
+<!-- L2TP Credentials Modal -->
+<div id="l2tp-modal">
+  <div class="l2tp-box">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div style="font-size:15px;font-weight:800">&#128737; L2TP / IPSec Credentials</div>
+      <button onclick="closeL2tp()" style="background:none;border:none;color:var(--t3);font-size:20px;cursor:pointer;line-height:1">&#215;</button>
+    </div>
+    <div id="l2tp-modal-body"></div>
+    <div style="margin-top:16px;font-size:11px;color:var(--t3)">Credentials created for tunnel. Use in Windows/iOS/Android/macOS built-in VPN settings.</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- How It Works -->
+<section id="how-it-works">
+  <div class="container">
+    <div style="text-align:center" class="fade-up">
+      <div class="sec-tag">Simple Process</div>
+      <div class="sec-title">Up and Running in Under 30 Seconds</div>
+      <div class="sec-sub" style="margin:0 auto">No technical knowledge required. No software to install on your server. Just paste and go.</div>
+    </div>
+    <div class="flow-steps">
+      <div class="flow-step fade-up fade-up-delay-1">
+        <div class="flow-num"><span class="flow-step-n">1</span>&#128273;</div>
+        <h3>Get Your API Key</h3>
+        <p>Login to the portal with your API key to access the dashboard</p>
+      </div>
+      <div class="flow-step fade-up fade-up-delay-2">
+        <div class="flow-num"><span class="flow-step-n">2</span>&#128279;</div>
+        <h3>Paste Proxy URL</h3>
+        <p>Enter your HTTP, HTTPS, or SOCKS5 proxy URL — with or without authentication</p>
+      </div>
+      <div class="flow-step fade-up fade-up-delay-3">
+        <div class="flow-num"><span class="flow-step-n">3</span>&#9889;</div>
+        <h3>Tunnel Built</h3>
+        <p>System creates an encrypted VPN gateway routing through your proxy</p>
+      </div>
+      <div class="flow-step fade-up fade-up-delay-4">
+        <div class="flow-num"><span class="flow-step-n">4</span>&#11015;</div>
+        <h3>Download Config</h3>
+        <p>Get your .ovpn file or L2TP credentials — import to any VPN client</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Features -->
+<section id="features">
+  <div class="container">
+    <div class="fade-up">
+      <div class="sec-tag">Why Choose Us</div>
+      <div class="sec-title">Everything You Need</div>
+      <div class="sec-sub">A complete toolkit to convert your proxies into professional-grade VPN connections.</div>
+    </div>
+    <div class="features-grid">
+      <div class="feat-card fade-up fade-up-delay-1" style="--card-color:#3d7ef8">
+        <div class="feat-icon" style="background:rgba(61,126,248,.1);border-color:rgba(61,126,248,.2);color:var(--bl2)">&#128100;</div>
+        <h3>Per-Customer Isolation</h3>
+        <p>Each customer gets their own private tunnel. Your proxy, your configs, your credentials — completely isolated from other users.</p>
+        <div class="feat-tags"><span class="feat-tag">Private</span><span class="feat-tag">Isolated</span></div>
+      </div>
+      <div class="feat-card fade-up fade-up-delay-2" style="--card-color:#9b74f5">
+        <div class="feat-icon" style="background:rgba(155,116,245,.1);border-color:rgba(155,116,245,.2);color:var(--pu)">&#128421;</div>
+        <h3>Multi-Device Support</h3>
+        <p>Generate separate VPN configs for each device — phone, laptop, tablet. One proxy tunnel, unlimited devices.</p>
+        <div class="feat-tags"><span class="feat-tag" style="color:var(--pu);background:rgba(155,116,245,.1);border-color:rgba(155,116,245,.2)">Windows</span><span class="feat-tag" style="color:var(--pu);background:rgba(155,116,245,.1);border-color:rgba(155,116,245,.2)">iOS</span><span class="feat-tag" style="color:var(--pu);background:rgba(155,116,245,.1);border-color:rgba(155,116,245,.2)">Android</span></div>
+      </div>
+      <div class="feat-card fade-up fade-up-delay-3" style="--card-color:#16c87a">
+        <div class="feat-icon" style="background:rgba(22,200,122,.1);border-color:rgba(22,200,122,.2);color:var(--gr)">&#128274;</div>
+        <h3>AES-256 Encryption</h3>
+        <p>All traffic is encrypted with AES-256-GCM. Your data is secure between your device and the proxy exit point.</p>
+        <div class="feat-tags"><span class="feat-tag" style="color:var(--gr);background:rgba(22,200,122,.1);border-color:rgba(22,200,122,.2)">AES-256-GCM</span><span class="feat-tag" style="color:var(--gr);background:rgba(22,200,122,.1);border-color:rgba(22,200,122,.2)">SHA-256</span></div>
+      </div>
+      <div class="feat-card fade-up fade-up-delay-1" style="--card-color:#f59e0b">
+        <div class="feat-icon" style="background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.2);color:var(--or)">&#9889;</div>
+        <h3>Instant Setup</h3>
+        <p>No server configuration, no CLI commands. Paste proxy URL → click Create → download config. Under 30 seconds.</p>
+        <div class="feat-tags"><span class="feat-tag" style="color:var(--or);background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.2)">Auto-generate</span><span class="feat-tag" style="color:var(--or);background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.2)">No CLI</span></div>
+      </div>
+      <div class="feat-card fade-up fade-up-delay-2" style="--card-color:#3d7ef8">
+        <div class="feat-icon" style="background:rgba(61,126,248,.1);border-color:rgba(61,126,248,.2);color:var(--bl2)">&#128269;</div>
+        <h3>Proxy Checker Built-In</h3>
+        <p>Test your proxies before creating tunnels. Check latency, IP, country, ISP — all from the same dashboard.</p>
+        <div class="feat-tags"><span class="feat-tag">HTTP</span><span class="feat-tag">SOCKS5</span><span class="feat-tag">Batch check</span></div>
+      </div>
+      <div class="feat-card fade-up fade-up-delay-3" style="--card-color:#9b74f5">
+        <div class="feat-icon" style="background:rgba(155,116,245,.1);border-color:rgba(155,116,245,.2);color:var(--pu)">&#128196;</div>
+        <h3>Re-download Anytime</h3>
+        <p>Lost your .ovpn file? Re-download it anytime from the dashboard. Revoke and regenerate if compromised.</p>
+        <div class="feat-tags"><span class="feat-tag" style="color:var(--pu);background:rgba(155,116,245,.1);border-color:rgba(155,116,245,.2)">Persistent</span><span class="feat-tag" style="color:var(--pu);background:rgba(155,116,245,.1);border-color:rgba(155,116,245,.2)">Revocable</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Protocols -->
+<section id="protocols">
+  <div class="container">
+    <div class="fade-up">
+      <div class="sec-tag">VPN Protocols</div>
+      <div class="sec-title">Choose Your Protocol</div>
+      <div class="sec-sub">Two protocols to fit different devices and use cases. Both route through your own proxy.</div>
+    </div>
+    <div class="proto-grid">
+      <div class="proto-card fade-up fade-up-delay-1">
+        <div class="proto-badge" style="background:rgba(61,126,248,.1);font-size:26px">&#128274;</div>
+        <div>
+          <h3>OpenVPN <span class="badge bg" style="margin-left:6px;font-size:10px">Recommended</span></h3>
+          <p>Industry-standard VPN protocol. Runs over UDP for speed. Generates a portable .ovpn config file importable on any OS.</p>
+          <div><span class="proto-chip" style="background:rgba(61,126,248,.1);color:var(--bl2)">AES-256-GCM</span> <span class="proto-chip" style="background:rgba(61,126,248,.1);color:var(--bl2)">TLS Auth</span> <span class="proto-chip" style="background:rgba(61,126,248,.1);color:var(--bl2)">UDP</span></div>
+          <div class="app-grid" style="margin-top:12px">
+            <div class="app-chip"><span class="app-chip-icon">&#128421;</span>Windows</div>
+            <div class="app-chip"><span class="app-chip-icon">&#63743;</span>macOS</div>
+            <div class="app-chip"><span class="app-chip-icon">&#128241;</span>iOS</div>
+            <div class="app-chip"><span class="app-chip-icon">&#129337;</span>Android</div>
+            <div class="app-chip"><span class="app-chip-icon">&#128039;</span>Linux</div>
+          </div>
+        </div>
+      </div>
+      <div class="proto-card fade-up fade-up-delay-2">
+        <div class="proto-badge" style="background:rgba(155,116,245,.1);font-size:26px">&#128737;</div>
+        <div>
+          <h3>L2TP / IPSec <span class="badge bp" style="margin-left:6px;font-size:10px">Built-in OS</span></h3>
+          <p>No app required — supported natively in Windows, macOS, iOS and Android. Activate on any of your proxy tunnels.</p>
+          <div><span class="proto-chip" style="background:rgba(155,116,245,.1);color:var(--pu)">IPSec PSK</span> <span class="proto-chip" style="background:rgba(155,116,245,.1);color:var(--pu)">No App</span> <span class="proto-chip" style="background:rgba(155,116,245,.1);color:var(--pu)">Built-in</span></div>
+          <div class="app-grid" style="margin-top:12px">
+            <div class="app-chip"><span class="app-chip-icon">&#128421;</span>Windows</div>
+            <div class="app-chip"><span class="app-chip-icon">&#63743;</span>macOS/iOS</div>
+            <div class="app-chip"><span class="app-chip-icon">&#129337;</span>Android</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Setup Guide -->
+<section id="setup">
+  <div class="container">
+    <div class="fade-up">
+      <div class="sec-tag">Setup Guide</div>
+      <div class="sec-title">Connect on Any Device</div>
+      <div class="sec-sub">Step-by-step instructions for every platform. Get connected in minutes.</div>
+    </div>
+    <div style="margin-top:36px" class="fade-up">
+      <div class="platform-tabs">
+        <button class="ptab active" onclick="showPlatform('windows')">&#128421; Windows</button>
+        <button class="ptab" onclick="showPlatform('macos')">&#63743; macOS</button>
+        <button class="ptab" onclick="showPlatform('ios')">&#128241; iPhone / iPad</button>
+        <button class="ptab" onclick="showPlatform('android')">&#129337; Android</button>
+        <button class="ptab" onclick="showPlatform('linux')">&#128039; Linux</button>
+        <button class="ptab" onclick="showPlatform('l2tp')">&#128737; L2TP (All OS)</button>
+      </div>
+
+      <!-- Windows -->
+      <div class="platform-content active" id="plat-windows">
+        <div class="step-list">
+          <div class="step-item"><div class="step-circle">1</div><div><h4>Download OpenVPN GUI</h4><p>Go to <a href="https://openvpn.net/community-downloads/" style="color:var(--bl2)" target="_blank">openvpn.net/community-downloads</a> and download the <strong>Windows Installer</strong>.<br><span class="dl-badge">&#11015; OpenVPN GUI for Windows (free)</span></p></div></div>
+          <div class="step-item"><div class="step-circle">2</div><div><h4>Get Your .ovpn Config</h4><p>Login to the portal → <strong>My Proxies → VPN</strong> → Add your proxy → Download the generated <code class="code-inline">.ovpn</code> file.</p></div></div>
+          <div class="step-item"><div class="step-circle">3</div><div><h4>Import the Config</h4><p>Right-click the <strong>OpenVPN GUI</strong> tray icon → <strong>Import file</strong> → Select your <code class="code-inline">.ovpn</code> file.</p></div></div>
+          <div class="step-item"><div class="step-circle">4</div><div><h4>Connect</h4><p>Right-click the tray icon → Select your connection → Click <strong>Connect</strong>. The icon turns green when connected.</p></div></div>
+        </div>
+      </div>
+
+      <!-- macOS -->
+      <div class="platform-content" id="plat-macos">
+        <div class="step-list">
+          <div class="step-item"><div class="step-circle">1</div><div><h4>Install Tunnelblick</h4><p>Download <a href="https://tunnelblick.net" style="color:var(--bl2)" target="_blank">Tunnelblick</a> (free, open-source OpenVPN client for macOS).<br><span class="dl-badge">&#11015; Tunnelblick for macOS (free)</span></p></div></div>
+          <div class="step-item"><div class="step-circle">2</div><div><h4>Download Your Config</h4><p>Portal → <strong>My Proxies → VPN</strong> → Add proxy → Download <code class="code-inline">.ovpn</code>.</p></div></div>
+          <div class="step-item"><div class="step-circle">3</div><div><h4>Install Config</h4><p>Double-click the <code class="code-inline">.ovpn</code> file — Tunnelblick will automatically install it. Choose <strong>Only Me</strong> or <strong>All Users</strong>.</p></div></div>
+          <div class="step-item"><div class="step-circle">4</div><div><h4>Connect</h4><p>Click Tunnelblick in the menu bar → Select your VPN → Click <strong>Connect</strong>.</p></div></div>
+        </div>
+      </div>
+
+      <!-- iOS -->
+      <div class="platform-content" id="plat-ios">
+        <div class="step-list">
+          <div class="step-item"><div class="step-circle">1</div><div><h4>Install OpenVPN Connect</h4><p>Download <strong>OpenVPN Connect</strong> from the App Store (free).<br><span class="dl-badge">&#11015; App Store — OpenVPN Connect</span></p></div></div>
+          <div class="step-item"><div class="step-circle">2</div><div><h4>Download Config to iPhone</h4><p>Open portal in Safari → <strong>My Proxies → VPN</strong> → tap <strong>Download .ovpn</strong>. When prompted, choose <strong>Share → OpenVPN</strong>.</p></div></div>
+          <div class="step-item"><div class="step-circle">3</div><div><h4>Add Profile</h4><p>In OpenVPN Connect, tap <strong>+</strong> → <strong>Import from Files</strong> → Select your .ovpn → tap <strong>Add</strong>.</p></div></div>
+          <div class="step-item"><div class="step-circle">4</div><div><h4>Connect</h4><p>Toggle the connection switch. Allow the VPN configuration when prompted by iOS.</p></div></div>
+        </div>
+      </div>
+
+      <!-- Android -->
+      <div class="platform-content" id="plat-android">
+        <div class="step-list">
+          <div class="step-item"><div class="step-circle">1</div><div><h4>Install OpenVPN for Android</h4><p>Install <strong>OpenVPN for Android</strong> or <strong>OpenVPN Connect</strong> from Google Play (both free).<br><span class="dl-badge">&#11015; Google Play — OpenVPN for Android</span></p></div></div>
+          <div class="step-item"><div class="step-circle">2</div><div><h4>Download Config</h4><p>Open the portal in Chrome → <strong>My Proxies → VPN</strong> → Download <code class="code-inline">.ovpn</code> file. It saves to your Downloads folder.</p></div></div>
+          <div class="step-item"><div class="step-circle">3</div><div><h4>Import Profile</h4><p>Open OpenVPN → tap <strong>Import</strong> → browse to <strong>Downloads</strong> → select the <code class="code-inline">.ovpn</code> file → tap <strong>Import</strong>.</p></div></div>
+          <div class="step-item"><div class="step-circle">4</div><div><h4>Connect</h4><p>Tap the connect button. Android will ask to allow the VPN — tap <strong>OK</strong>.</p></div></div>
+        </div>
+      </div>
+
+      <!-- Linux -->
+      <div class="platform-content" id="plat-linux">
+        <div class="step-list">
+          <div class="step-item"><div class="step-circle">1</div><div><h4>Install OpenVPN</h4><p>Run in terminal:</p><div class="code-block">sudo apt install openvpn   # Ubuntu/Debian<br>sudo yum install openvpn   # CentOS/RHEL<br>sudo pacman -S openvpn     # Arch</div></div></div>
+          <div class="step-item"><div class="step-circle">2</div><div><h4>Download Config</h4><p>Portal → <strong>My Proxies → VPN</strong> → Download <code class="code-inline">.ovpn</code>. Or use curl:<br><div class="code-block">curl -O https://your-server/portal-app<br># (download from the portal dashboard)</div></p></div></div>
+          <div class="step-item"><div class="step-circle">3</div><div><h4>Connect</h4><div class="code-block">sudo openvpn --config your-config.ovpn</div><p style="margin-top:6px">Or with NetworkManager GUI: <strong>Add VPN → Import from file</strong>.</p></div></div>
+          <div class="step-item"><div class="step-circle">4</div><div><h4>Auto-start on Boot (optional)</h4><div class="code-block">sudo cp your-config.ovpn /etc/openvpn/client.conf<br>sudo systemctl enable openvpn-client@client<br>sudo systemctl start openvpn-client@client</div></div></div>
+        </div>
+      </div>
+
+      <!-- L2TP -->
+      <div class="platform-content" id="plat-l2tp">
+        <div style="margin-bottom:16px" class="step-item" style="background:rgba(155,116,245,.05);border-color:rgba(155,116,245,.2)">
+          <div class="step-circle" style="background:linear-gradient(135deg,var(--pu),var(--bl))">&#9432;</div>
+          <div><h4>Get Your L2TP Credentials First</h4><p>Portal → <strong>L2TP / IPSec</strong> tab → Select a tunnel → credentials appear (Server IP, PSK, Username, Password).</p></div>
+        </div>
+        <div class="step-list">
+          <div class="step-item"><div class="step-circle">W</div><div><h4>Windows</h4><p>Settings → Network → VPN → <strong>Add VPN</strong> → Provider: Windows built-in → Type: <strong>L2TP/IPsec with pre-shared key</strong> → Enter Server IP, PSK, Username, Password.</p></div></div>
+          <div class="step-item"><div class="step-circle">&#63743;</div><div><h4>iPhone / iPad / macOS</h4><p>Settings → General → VPN → <strong>Add VPN Configuration</strong> → Type: <strong>L2TP</strong> → Server, Account, Password, Secret (PSK).</p></div></div>
+          <div class="step-item"><div class="step-circle">A</div><div><h4>Android</h4><p>Settings → Network → VPN → <strong>+</strong> → Type: <strong>L2TP/IPSec PSK</strong> → Server, IPSec pre-shared key, Username, Password.</p></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="container fade-up">
+    <h2>Ready to Convert Your <span style="background:linear-gradient(135deg,#3d7ef8,#9b74f5);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Proxy into VPN?</span></h2>
+    <p>Get your API key, add a proxy, and be connected in under 30 seconds. Works with any HTTP or SOCKS5 proxy.</p>
+    <div class="cta-btns">
+      <a href="/portal-app" class="btn btn-primary btn-lg" id="cta-btn-manage" style="display:none">&#128421; Manage My VPN</a>
+      <a href="/portal" class="btn btn-primary btn-lg" id="cta-btn-login">&#9889; Enter Portal</a>
+      <a href="#setup" class="btn btn-outline btn-lg">&#128196; View Setup Guide</a>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="brand" id="footer-brand">Proxy to VPN</div>
+  <p style="margin-top:4px">Convert any proxy to a full VPN — OpenVPN &amp; L2TP/IPSec supported</p>
+  <div style="margin-top:16px;display:flex;gap:16px;justify-content:center;flex-wrap:wrap">
+    <a href="/portal-app" style="color:var(--bl2);font-weight:600">&#128421; Manage My VPN</a>
+    <a href="/portal" style="color:var(--t2)">Customer Portal</a>
+    <a href="/login" style="color:var(--t2)">Admin Login</a>
+    <a href="#features" style="color:var(--t2)">Features</a>
+    <a href="#setup" style="color:var(--t2)">Setup Guide</a>
+  </div>
+</footer>
+
+<script>
+// ── Init page (public, no auth required) ─────────────────────────────────────
+async function initPage() {
+  await loadBrand();
+  const key = localStorage.getItem('_customer_key');
+  if (key) {
+    try {
+      const r = await fetch('/api/key/me', { headers: { 'x-api-key': key } });
+      if (r.ok) {
+        const d = await r.json();
+        document.getElementById('nav-btn-login').style.display = 'none';
+        document.getElementById('nav-btn-manage').style.display = '';
+        document.getElementById('hero-btn-login').style.display = 'none';
+        document.getElementById('hero-btn-manage').style.display = '';
+        document.getElementById('cta-btn-login').style.display = 'none';
+        document.getElementById('cta-btn-manage').style.display = '';
+        const userEl = document.getElementById('nav-user-info');
+        if (userEl) userEl.textContent = d.note || d.name || 'Connected';
+        const chip = document.getElementById('nav-user-chip');
+        if (chip) chip.style.display = 'flex';
+        loadMyTunnels();
+      }
+    } catch(e) {} // silent fail — just show public page
+  }
+  setTimeout(() => {
+    document.getElementById('loader').classList.add('hide');
+    startTerminalDemo();
+  }, 1000);
+}
+
+async function loadBrand() {
+  try {
+    const r = await fetch('/api/admin/settings');
+    const d = await r.json();
+    if (d.brand_name) {
+      ['loader-brand','nav-brand','footer-brand'].forEach(id=>{
+        const el=document.getElementById(id); if(el) el.textContent=d.brand_name;
+      });
+      document.title = d.brand_name + ' — Turn Any Proxy Into a VPN';
+    }
+  } catch(e){}
+}
+
+// ── My Tunnels ────────────────────────────────────────────────────────────────
+let _apiKey = '';
+async function loadMyTunnels() {
+  _apiKey = localStorage.getItem('_customer_key') || '';
+  const sec = document.getElementById('my-tunnels');
+  const grid = document.getElementById('tunnel-grid');
+  sec.style.display = '';
+  // skeleton
+  grid.innerHTML = [1,2].map(()=>`<div class="tunnel-card">
+    <div class="tunnel-head"><div class="skel2" style="width:12px;height:12px;border-radius:50%;flex-shrink:0"></div><div class="skel2" style="height:13px;width:120px;margin-left:8px"></div><div class="skel2" style="height:11px;width:80px"></div></div>
+    <div class="tunnel-body"><div class="skel2" style="height:10px;width:60%;margin-bottom:8px"></div><div class="skel2" style="height:10px;width:40%;margin-bottom:12px"></div><div style="display:flex;gap:6px"><div class="skel2" style="height:28px;width:90px;border-radius:7px"></div><div class="skel2" style="height:28px;width:90px;border-radius:7px"></div></div></div>
+  </div>`).join('');
+  try {
+    const [gwRes, clientRes] = await Promise.all([
+      fetch('/api/customer/proxies', {headers:{'x-api-key':_apiKey}}),
+      fetch('/api/customer/vpn/clients', {headers:{'x-api-key':_apiKey}})
+    ]);
+    const gws = await gwRes.json();
+    const clients = clientRes.ok ? await clientRes.json() : [];
+    const gwList = Array.isArray(gws) ? gws : (gws.gateways||[]);
+    const clientList = Array.isArray(clients) ? clients : (clients.clients||[]);
+    if (!gwList.length) {
+      grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px 20px;color:var(--t3)">
+        <div style="font-size:32px;margin-bottom:12px">&#128274;</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">No VPN tunnels yet</div>
+        <div style="font-size:13px;margin-bottom:16px">Add a proxy to create your first tunnel</div>
+        <a href="/portal-app" class="btn btn-primary btn-sm">&#43; Add Proxy → Build VPN</a>
+      </div>`;
+      return;
+    }
+    grid.innerHTML = gwList.map(gw => {
+      const gwClients = clientList.filter(c => c.gateway === gw.name || (c.cert_name||'').startsWith(gw.name+'_'));
+      const clientRows = gwClients.length ? gwClients.map(c => `
+        <div class="client-row">
+          <span class="client-row-name">&#128241; ${esc(c.client_name||c.cert_name)}</span>
+          <button class="ta-btn ta-btn-blue" style="padding:3px 8px;font-size:11px" onclick="downloadOvpn('${esc(c.cert_name)}','${esc(c.client_name||c.cert_name)}')">&#11015; .ovpn</button>
+        </div>`).join('') : `<div style="font-size:12px;color:var(--t3);padding:4px 0">No VPN configs yet</div>`;
+      return `<div class="tunnel-card">
+        <div class="tunnel-head">
+          <div class="tunnel-dot"></div>
+          <div class="tunnel-name">${esc(gw.name)}</div>
+          <div class="tunnel-ip">${esc(gw.proxy_host||gw.exit_ip||'')}</div>
+        </div>
+        <div class="tunnel-body">
+          <div class="tunnel-meta">
+            ${gw.proxy_type?`<span class="tmeta">${esc(gw.proxy_type.toUpperCase())}</span>`:''}
+            ${gw.port?`<span class="tmeta">:${esc(String(gw.port))}</span>`:''}
+            <span class="tmeta">&#128274; OpenVPN</span>
+            <span class="tmeta" style="color:var(--pu);border-color:rgba(155,116,245,.2)">&#128737; L2TP</span>
+          </div>
+          ${gwClients.length ? `<div class="tunnel-clients"><div class="tunnel-clients-title">VPN Configs (${gwClients.length})</div>${clientRows}</div>` : clientRows}
+          <div class="tunnel-actions">
+            <button class="ta-btn ta-btn-green" onclick="addDevice('${esc(gw.name)}')">&#43; Add Device</button>
+            <button class="ta-btn ta-btn-purple" onclick="showL2tp('${esc(gw.name)}')">&#128737; L2TP Creds</button>
+            <a href="/portal-app" class="ta-btn ta-btn-orange">&#128421; Full Manage</a>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    grid.innerHTML = `<div style="grid-column:1/-1;color:var(--rd);font-size:13px;padding:20px">Failed to load tunnels: ${e.message}</div>`;
+  }
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function downloadOvpn(certName, label) {
+  try {
+    const r = await fetch(`/api/customer/vpn/client/${encodeURIComponent(certName)}/ovpn`, {headers:{'x-api-key':_apiKey}});
+    if (!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    const content = d.ovpn||d.content||'';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([content],{type:'application/x-openvpn-profile'}));
+    a.download = (label||certName).replace(/[^a-zA-Z0-9_-]/g,'_')+'.ovpn';
+    a.click();
+  } catch(e){ alert('Error: '+e.message); }
+}
+
+async function addDevice(gwName) {
+  const name = prompt('Device name (e.g. iphone, laptop):', '');
+  if (!name || !name.trim()) return;
+  const cleanName = name.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  if (!cleanName) return alert('Invalid name. Use letters, numbers, _ or - only.');
+  try {
+    const r = await fetch(`/api/customer/gateway/${encodeURIComponent(gwName)}/client`, {
+      method:'POST', headers:{'x-api-key':_apiKey,'Content-Type':'application/json'},
+      body: JSON.stringify({client_name: cleanName})
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error||r.statusText);
+    // auto-download
+    const content = d.ovpn||d.content||'';
+    if (content) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([content],{type:'application/x-openvpn-profile'}));
+      a.download = `${gwName}_${cleanName}.ovpn`;
+      a.click();
+    }
+    loadMyTunnels();
+  } catch(e){ alert('Error: '+e.message); }
+}
+
+async function showL2tp(gwName) {
+  const modal = document.getElementById('l2tp-modal');
+  const body = document.getElementById('l2tp-modal-body');
+  body.innerHTML = '<div style="color:var(--t3);font-size:13px">Loading...</div>';
+  modal.classList.add('open');
+  try {
+    const r = await fetch('/api/customer/l2tp', {headers:{'x-api-key':_apiKey}});
+    const all = await r.json();
+    const list = Array.isArray(all) ? all : (all.credentials||[]);
+    const creds = list.find(c => c.gateway === gwName);
+    if (!creds) {
+      // offer to create
+      body.innerHTML = `<div style="color:var(--t3);font-size:13px;margin-bottom:16px">No L2TP credentials for <b>${esc(gwName)}</b> yet.</div>
+        <button class="btn btn-primary btn-sm" onclick="createL2tp('${esc(gwName)}')">&#43; Create L2TP Credentials</button>`;
+      return;
+    }
+    renderL2tpCreds(creds);
+  } catch(e) {
+    body.innerHTML = `<div style="color:var(--rd);font-size:13px">${e.message}</div>`;
+  }
+}
+
+function renderL2tpCreds(c) {
+  const body = document.getElementById('l2tp-modal-body');
+  const f = (label, val) => `<div class="l2tp-field">
+    <div class="l2tp-label">${label}</div>
+    <div class="l2tp-val"><span id="l2-${label.replace(/\s/g,'')}">${esc(String(val))}</span>
+      <button class="l2tp-copy" onclick="copyL2tp('l2-${label.replace(/\s/g,'')}')">&#128203;</button>
+    </div></div>`;
+  body.innerHTML = f('Server IP', c.server_ip||c.host||'') + f('Username', c.username||'') + f('Password', c.password||'') + f('Pre-shared Key', c.psk||c.pre_shared_key||'vpn');
+}
+
+async function createL2tp(gwName) {
+  document.getElementById('l2tp-modal-body').innerHTML = '<div style="color:var(--t3);font-size:13px">Creating...</div>';
+  try {
+    const r = await fetch(`/api/customer/l2tp/gateway/${encodeURIComponent(gwName)}`, {
+      method:'POST', headers:{'x-api-key':_apiKey}
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error||r.statusText);
+    renderL2tpCreds(d.credentials||d);
+  } catch(e) {
+    document.getElementById('l2tp-modal-body').innerHTML = `<div style="color:var(--rd);font-size:13px">${e.message}</div>`;
+  }
+}
+
+function copyL2tp(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(()=>{ el.parentElement.style.borderColor='var(--gr)'; setTimeout(()=>el.parentElement.style.borderColor='',1200); });
+}
+
+function closeL2tp() { document.getElementById('l2tp-modal').classList.remove('open'); }
+document.getElementById('l2tp-modal').addEventListener('click', e => { if (e.target===document.getElementById('l2tp-modal')) closeL2tp(); });
+
+// ── Start on load ─────────────────────────────────────────────────────────────
+window.addEventListener('load', () => { initPage(); });
+
+// ── Navbar scroll ──────────────────────────────────────────────────────────────
+window.addEventListener('scroll', () => {
+  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// ── Scroll animations ──────────────────────────────────────────────────────────
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+// ── Terminal demo animation ────────────────────────────────────────────────────
+function startTerminalDemo() {
+  const lines = [
+    { text: '$ curl -X POST /api/customer/proxy \\', cls: 't-dim' },
+    { text: '  -d \'{"proxy_url":"socks5://1.2.3.4:1080"}\'', cls: 't-dim' },
+    { text: '', cls: '' },
+    { text: '&#10003; Proxy validated', cls: 't-green', delay: 600 },
+    { text: '&#10003; Gateway created: c4f2a31', cls: 't-green', delay: 400 },
+    { text: '&#10003; OpenVPN cert generated', cls: 't-green', delay: 500 },
+    { text: '&#10003; Config ready to download', cls: 't-green', delay: 400 },
+    { text: '', cls: '' },
+    { text: '{', cls: 't-dim' },
+    { text: '  "ok": <span class="t-purple">true</span>,', cls: '' },
+    { text: '  "gateway": <span class="t-green">"c4f2a31"</span>,', cls: '' },
+    { text: '  "exit_ip": <span class="t-blue">"1.2.3.4"</span>,', cls: '' },
+    { text: '  "vpn_port": <span class="t-orange">1194</span>,', cls: '' },
+    { text: '  "ovpn": <span class="t-green">"client\\ndev tun\\n..."</span>', cls: '' },
+    { text: '}', cls: 't-dim' },
+    { text: '', cls: '' },
+    { text: '$ <span class="t-cursor"></span>', cls: '', final: true },
+  ];
+  const el = document.getElementById('terminal-demo');
+  el.innerHTML = '';
+  let i = 0;
+  function next() {
+    if (i >= lines.length) return;
+    const l = lines[i++];
+    const div = document.createElement('div');
+    div.innerHTML = l.text;
+    if (l.cls) div.className = l.cls;
+    div.style.opacity = '0';
+    div.style.transform = 'translateX(-6px)';
+    el.appendChild(div);
+    requestAnimationFrame(() => {
+      div.style.transition = '.2s all';
+      div.style.opacity = '1';
+      div.style.transform = 'translateX(0)';
+    });
+    el.scrollTop = el.scrollHeight;
+    if (!l.final) setTimeout(next, l.delay || 120);
+  }
+  next();
+}
+
+// ── Platform tabs ──────────────────────────────────────────────────────────────
+function showPlatform(id) {
+  document.querySelectorAll('.platform-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.ptab').forEach(el => el.classList.remove('active'));
+  document.getElementById('plat-'+id).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ── Smooth scroll for nav links ────────────────────────────────────────────────
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  });
+});
+</script>
+</body>
+</html>

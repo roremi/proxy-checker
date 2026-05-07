@@ -1,6 +1,35 @@
+# Dependencies
 node_modules/
+
+# Env / secrets
 .env
+.env.*
+!.env.example
+
+# Logs
 *.log
+
+# SQLite captures DB
 captures.db
 captures.db-shm
 captures.db-wal
+
+# Runtime data files (secrets / customer data — keep local only)
+settings.json
+api-keys.json
+gateways.json
+ovpn-clients.json
+vpn-clients.json
+l2tp-users.json
+proxy-library.json
+customer-libraries.json
+
+# Archive / scratch
+_archive/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+*.bak
+*.old
+*~

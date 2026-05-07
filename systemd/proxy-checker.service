@@ -1,0 +1,15 @@
+[Unit]
+Description=Proxy Checker Web App
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/proxy-checker
+ExecStart=/usr/bin/node /root/proxy-checker/server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production PORT=3000
+
+[Install]
+WantedBy=multi-user.target

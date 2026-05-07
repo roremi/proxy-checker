@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customers - VPN Panel</title>
+<style>
+:root{--bg:#0a0f1e;--sb:#060c18;--s1:#0d1525;--s2:#111e33;--s3:#16263e;--b1:#1a2f4a;--b2:#1f3a5a;--t1:#e4eaf4;--t2:#8fa8c8;--t3:#4a6080;--bl:#3d7ef8;--bl2:#6da0fa;--gr:#16c87a;--rd:#f04a4a;--or:#f59e0b;--pu:#9b74f5;--sw:220px}
+*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;display:flex;min-height:100vh}a{text-decoration:none;color:inherit}
+.sb{width:var(--sw);flex-shrink:0;background:var(--sb);border-right:1px solid var(--b1);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:50;overflow:hidden}
+.sb-logo{padding:18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1);flex-shrink:0}
+.sb-icon{width:36px;height:36px;background:linear-gradient(135deg,#3d7ef8,#6da0fa);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 4px 12px rgba(61,126,248,.3)}
+.sb-name{font-weight:700;font-size:14px;color:var(--t1);line-height:1.2}.sb-ver{font-size:10px;color:var(--t3);margin-top:1px}
+.sb-nav{flex:1;padding:10px 8px;overflow-y:auto}.nav-sep{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:10px 8px 4px}
+.nav-a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;color:var(--t2);font-size:13px;font-weight:500;margin-bottom:1px;transition:.15s all;cursor:pointer;border:1px solid transparent}
+.nav-a:hover{background:var(--s2);color:var(--t1)}.nav-a.active{background:rgba(61,126,248,.12);color:var(--bl2);border-color:rgba(61,126,248,.18)}
+.nav-a svg{width:16px;height:16px;flex-shrink:0;opacity:.7}.nav-a.active svg{opacity:1}
+.sb-foot{padding:10px 8px;border-top:1px solid var(--b1);flex-shrink:0}.sb-foot .nav-a{width:100%;background:none;border:none;font-family:inherit}
+.main{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0}
+.topbar{background:var(--sb);border-bottom:1px solid var(--b1);padding:0 28px;height:58px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+.topbar-title{font-size:16px;font-weight:700;flex:1}
+.topbar-ip{background:rgba(22,200,122,.1);border:1px solid rgba(22,200,122,.2);color:var(--gr);padding:4px 10px;border-radius:20px;font-size:11px;font-family:monospace}
+.content{padding:24px 28px;flex:1}
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin-bottom:18px;overflow:hidden}
+.card-head{padding:14px 20px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.card-head h2{font-size:13px;font-weight:700;flex:1}
+table{width:100%;border-collapse:collapse}
+th{padding:9px 14px;text-align:left;font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--b1);background:var(--s2);white-space:nowrap}
+td{padding:10px 14px;font-size:13px;border-bottom:1px solid rgba(26,47,74,.5);vertical-align:middle}
+tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.bg{background:rgba(22,200,122,.1);color:var(--gr);border:1px solid rgba(22,200,122,.2)}
+.br{background:rgba(240,74,74,.1);color:var(--rd);border:1px solid rgba(240,74,74,.2)}
+.bo{background:rgba(245,158,11,.1);color:var(--or);border:1px solid rgba(245,158,11,.2)}
+.bd{background:rgba(74,96,128,.1);color:var(--t3);border:1px solid rgba(74,96,128,.2)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:.15s all;font-family:inherit;white-space:nowrap}
+.btn:hover{background:var(--s3);border-color:var(--b2)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--bl);border-color:var(--bl);color:#fff}.btn-primary:hover{opacity:.9}
+.btn-danger{border-color:rgba(240,74,74,.25);color:var(--rd)}.btn-danger:hover{background:rgba(240,74,74,.1)}
+.btn-warn{border-color:rgba(245,158,11,.25);color:var(--or)}.btn-warn:hover{background:rgba(245,158,11,.1)}
+.btn-green{border-color:rgba(22,200,122,.25);color:var(--gr)}.btn-green:hover{background:rgba(22,200,122,.1)}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px;gap:4px}.btn-xs{padding:3px 8px;font-size:11px;border-radius:5px;gap:3px}
+.btn-row{display:flex;gap:5px;flex-wrap:nowrap;align-items:center}
+.mono{font-family:'SF Mono',Consolas,monospace;font-size:12px}.text-dim{color:var(--t3)}.text-xs{font-size:11px}.text-sm{font-size:12px}
+.prog{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;margin-top:4px}.prog-bar{height:100%;border-radius:3px}
+.prog-ok{background:var(--gr)}.prog-warn{background:var(--or)}.prog-full{background:var(--rd)}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex}
+.modal{background:var(--s1);border:1px solid var(--b2);border-radius:14px;width:100%;max-width:540px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.modal-head{padding:18px 22px;border-bottom:1px solid var(--b1);flex-shrink:0;display:flex;align-items:center;justify-content:space-between}
+.modal-head h3{font-size:14px;font-weight:700}
+.close-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;color:var(--t3);background:none;border:none;font-size:20px;line-height:1;transition:.15s}
+.close-btn:hover{background:var(--s2);color:var(--t1)}
+.modal-body{padding:22px;overflow-y:auto;flex:1}
+.modal-foot{padding:14px 22px;border-top:1px solid var(--b1);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:11px;color:var(--t2);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+input[type=text],input[type=number],input[type=date],input[type=password],select{width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--t1);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;transition:.15s;font-family:inherit}
+input:focus,select:focus{border-color:var(--bl);box-shadow:0 0 0 3px rgba(61,126,248,.1)}::placeholder{color:var(--t3)}
+.fr2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.chk-group{display:flex;flex-wrap:wrap;gap:10px}
+.chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--t2);cursor:pointer}
+.chk input[type=checkbox]{width:14px;height:14px;accent-color:var(--bl);cursor:pointer}
+.key-reveal{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px 12px;font-family:monospace;font-size:12px;word-break:break-all;color:var(--bl2);line-height:1.5;margin-top:4px}
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;max-width:360px}
+.toast{background:var(--s2);border:1px solid var(--b2);color:var(--t1);padding:11px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);transition:.25s all;pointer-events:auto;word-break:break-word}
+.toast.show{opacity:1;transform:translateY(0)}.toast.err{border-color:rgba(240,74,74,.4)}.toast.ok{border-color:rgba(22,200,122,.3)}
+select option{background:var(--s2)}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+</style>
+</head>
+<body>
+<aside class="sb">
+  <div class="sb-logo"><div class="sb-icon">&#9889;</div><div><div class="sb-name" id="brand">VPN Panel</div><div class="sb-ver">Admin Console</div></div></div>
+  <nav class="sb-nav">
+    <div class="nav-sep">Overview</div>
+    <a href="/dashboard" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
+    <div class="nav-sep">Management</div>
+    <a href="/gateways" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Gateways</a>
+    <a href="/keys" class="nav-a active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Customers</a>
+    <a href="/l2tp" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>L2TP / IPSec</a>
+    <div class="nav-sep">Tools</div>
+    <a href="/index" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Proxy Checker</a>
+    <a href="/captures" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3L14.5 4z"/><circle cx="12" cy="13" r="3"/></svg>Captures</a>
+    <div class="nav-sep">System</div>
+    <a href="/settings" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+  </nav>
+  <div class="sb-foot"><button onclick="logout()" class="nav-a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button></div>
+</aside>
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">&#128273; Customer Accounts</div>
+    <span class="topbar-ip" id="srv-ip">-</span>
+  </div>
+  <div class="content">
+    <div class="card">
+      <div class="card-head">
+        <h2>API Keys &amp; Access Control</h2>
+        <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ New Customer</button>
+      </div>
+      <table>
+        <thead><tr><th>Customer</th><th>API Key</th><th>Permissions</th><th>Usage</th><th>Bandwidth</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
+        <tbody id="keys-tbody"><tr><td colspan="8" style="text-align:center;color:var(--t3);padding:30px">Loading&#8230;</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Create/Edit Modal -->
+<div class="overlay" id="edit-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="modal-title">New Customer</h3><button class="close-btn" onclick="closeModal()">&#215;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-id">
+      <div class="fg"><label>Customer Name</label><input type="text" id="edit-name" placeholder="Customer or company name"></div>
+      <div class="fg"><label>Note (internal)</label><input type="text" id="edit-note" placeholder="Internal note, plan type, etc."></div>
+      <div class="fr2">
+        <div class="fg"><label>Proxy Check Limit</label><input type="number" id="edit-check-limit" placeholder="0 = unlimited" min="0"></div>
+        <div class="fg"><label>Bandwidth Limit (GB)</label><input type="number" id="edit-bw-limit" placeholder="0 = unlimited" min="0"></div>
+      </div>
+      <div class="fg"><label>Expires (leave empty for no expiry)</label><input type="date" id="edit-expires"></div>
+      <div class="fg"><label>Allowed Gateways (comma-separated, empty = all)</label><input type="text" id="edit-gateways" placeholder="us-1, eu-2 (or leave empty for all)"></div>
+      <div class="fg">
+        <label>Permissions</label>
+        <div class="chk-group" id="edit-perms">
+          <label class="chk"><input type="checkbox" value="check_proxy"> Proxy Checker</label>
+          <label class="chk"><input type="checkbox" value="view_gateways"> View Gateways</label>
+          <label class="chk"><input type="checkbox" value="vpn_clients"> VPN Clients</label>
+          <label class="chk"><input type="checkbox" value="l2tp_credentials"> L2TP Credentials</label>
+        </div>
+      </div>
+      <div class="fg" id="key-display" style="display:none">
+        <label>API Key</label>
+        <div class="key-reveal" id="key-value"></div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="copyKey()">&#128203; Copy Key</button>
+          <button class="btn btn-warn btn-sm" onclick="resetKey()">&#8634; Regenerate Key</button>
+        </div>
+      </div>
+      <div class="fg" id="enabled-row" style="display:none">
+        <label class="chk" style="font-size:13px"><input type="checkbox" id="edit-enabled"> Account Enabled</label>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="save-btn" onclick="saveKey()">Create Customer</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+<script>
+const _tok = localStorage.getItem('_admin_token');
+if (!_tok) location.replace('/login');
+let _editId = null;
+
+async function fetchApi(url, opts = {}) {
+  opts.headers = { ...(opts.headers||{}), 'x-vpn-token': _tok, 'Content-Type': 'application/json' };
+  let r; try { r = await fetch(url, opts); } catch(e) { throw new Error('Network: ' + e.message); }
+  if (r.status === 401) { logout(); throw new Error('Session expired'); }
+  const txt = await r.text(); let d = {}; try { d = txt ? JSON.parse(txt) : {}; } catch(_) { d = { raw: txt }; }
+  if (!r.ok) throw new Error(d.error || d.raw || r.statusText); return d;
+}
+function logout() { localStorage.removeItem('_admin_token'); location.replace('/login'); }
+function toast(msg, type) {
+  const w = document.getElementById('toasts'); const el = document.createElement('div');
+  el.className = 'toast ' + (type === 'err' ? 'err' : 'ok'); el.textContent = msg; w.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 4000);
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtBytes(b) { if(!b||b===0)return '0 B'; const u=['B','KB','MB','GB','TB']; let i=0; while(b>=1024&&i<4){b/=1024;i++;} return b.toFixed(i>1?1:0)+' '+u[i]; }
+function fmtDate(d) { if(!d)return '-'; return new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+
+async function loadBrand() {
+  try { const d = await fetchApi('/api/admin/settings'); document.getElementById('brand').textContent = d.brand_name||'VPN Panel'; document.getElementById('srv-ip').textContent = d.server_ip; } catch(_) {}
+}
+
+async function loadKeys() {
+  try {
+    const d = await fetchApi('/api/admin/keys');
+    const tb = document.getElementById('keys-tbody');
+    const now = new Date();
+    if (!d.keys.length) { tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:30px">No customers yet. Create one!</td></tr>'; return; }
+    tb.innerHTML = d.keys.map(k => {
+      const expired = k.expires_at && new Date(k.expires_at) < now;
+      const status = !k.enabled ? '<span class="badge bd">Disabled</span>' : expired ? '<span class="badge br"><span class="dot"></span>Expired</span>' : '<span class="badge bg"><span class="dot"></span>Active</span>';
+      const chkPct = k.proxy_check_limit ? Math.min(100, (k.proxy_checks_used/k.proxy_check_limit)*100) : 0;
+      const bwUsed = k.bandwidth_used_bytes || 0;
+      const bwLimit = k.bandwidth_limit_gb ? k.bandwidth_limit_gb*1073741824 : 0;
+      const bwPct = bwLimit ? Math.min(100, (bwUsed/bwLimit)*100) : 0;
+      const barClass = (pct) => pct > 90 ? 'prog-full' : pct > 70 ? 'prog-warn' : 'prog-ok';
+      const perms = (k.permissions||[]).map(p => {
+        const labels = {check_proxy:'Checker',view_gateways:'Gateways',vpn_clients:'VPN',l2tp_credentials:'L2TP'};
+        return '<span class="badge bd" style="font-size:10px">'+(labels[p]||p)+'</span>';
+      }).join(' ');
+      return `<tr>
+        <td><strong>${esc(k.name)}</strong>${k.note?'<div class="text-xs text-dim" style="margin-top:2px">'+esc(k.note)+'</div>':''}</td>
+        <td><span class="mono" style="color:var(--bl2)">${esc(k.key_preview)}</span><br><button class="btn btn-xs" style="margin-top:4px" onclick="copyFullKey('${esc(k.key)}')">&#128203; Copy</button></td>
+        <td>${perms||'<span class="text-dim text-xs">none</span>'}</td>
+        <td>${k.proxy_checks_used||0}${k.proxy_check_limit?'/'+k.proxy_check_limit:''}<div class="prog"><div class="prog-bar ${barClass(chkPct)}" style="width:${chkPct}%"></div></div></td>
+        <td>${fmtBytes(bwUsed)}${k.bandwidth_limit_gb?' / '+k.bandwidth_limit_gb+'GB':''}<div class="prog"><div class="prog-bar ${barClass(bwPct)}" style="width:${bwPct}%"></div></div></td>
+        <td>${status}</td>
+        <td class="text-sm">${fmtDate(k.expires_at)}</td>
+        <td><div class="btn-row">
+          <button class="btn btn-sm" onclick="openEditModal('${esc(k.id)}')">Edit</button>
+          <button class="btn btn-warn btn-sm" onclick="resetUsage('${esc(k.id)}')">&#8634; Usage</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteKey('${esc(k.id)}','${esc(k.name)}')">&#10005;</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function openCreateModal() {
+  _editId = null;
+  document.getElementById('modal-title').textContent = 'New Customer';
+  document.getElementById('save-btn').textContent = 'Create Customer';
+  document.getElementById('edit-id').value = '';
+  ['edit-name','edit-note','edit-check-limit','edit-bw-limit','edit-expires','edit-gateways'].forEach(id => document.getElementById(id).value = '');
+  document.querySelectorAll('#edit-perms input[type=checkbox]').forEach(cb => cb.checked = cb.value === 'check_proxy');
+  document.getElementById('key-display').style.display = 'none';
+  document.getElementById('enabled-row').style.display = 'none';
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+async function openEditModal(id) {
+  _editId = id;
+  document.getElementById('modal-title').textContent = 'Edit Customer';
+  document.getElementById('save-btn').textContent = 'Save Changes';
+  try {
+    const d = await fetchApi('/api/admin/keys');
+    const k = d.keys.find(x => x.id === id); if (!k) return toast('Key not found', 'err');
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-name').value = k.name;
+    document.getElementById('edit-note').value = k.note || '';
+    document.getElementById('edit-check-limit').value = k.proxy_check_limit || '';
+    document.getElementById('edit-bw-limit').value = k.bandwidth_limit_gb || '';
+    document.getElementById('edit-expires').value = k.expires_at ? k.expires_at.slice(0,10) : '';
+    document.getElementById('edit-gateways').value = k.allowed_gateways ? (Array.isArray(k.allowed_gateways) ? k.allowed_gateways.join(', ') : k.allowed_gateways) : '';
+    document.querySelectorAll('#edit-perms input[type=checkbox]').forEach(cb => cb.checked = (k.permissions||[]).includes(cb.value));
+    document.getElementById('key-value').textContent = k.key;
+    document.getElementById('key-display').style.display = 'block';
+    document.getElementById('enabled-row').style.display = 'block';
+    document.getElementById('edit-enabled').checked = k.enabled;
+    document.getElementById('edit-modal').classList.add('open');
+  } catch(e) { toast(e.message, 'err'); }
+}
+
+function closeModal() { document.getElementById('edit-modal').classList.remove('open'); }
+
+async function saveKey() {
+  const name = document.getElementById('edit-name').value.trim();
+  if (!name) return toast('Customer name required', 'err');
+  const perms = [...document.querySelectorAll('#edit-perms input[type=checkbox]:checked')].map(cb => cb.value);
+  const chkLim = parseInt(document.getElementById('edit-check-limit').value) || null;
+  const bwLim = parseFloat(document.getElementById('edit-bw-limit').value) || null;
+  const expires = document.getElementById('edit-expires').value || null;
+  const gwRaw = document.getElementById('edit-gateways').value.trim();
+  const gateways = gwRaw ? gwRaw.split(',').map(s=>s.trim()).filter(Boolean) : null;
+  const body = { name, note: document.getElementById('edit-note').value.trim(), permissions: perms, proxy_check_limit: chkLim, bandwidth_limit_gb: bwLim, expires_at: expires, allowed_gateways: gateways };
+  if (_editId) { body.enabled = document.getElementById('edit-enabled').checked; }
+  const btn = document.getElementById('save-btn'); btn.disabled = true;
+  try {
+    if (_editId) { await fetchApi('/api/admin/keys/'+_editId, { method:'PUT', body:JSON.stringify(body) }); toast('Saved'); }
+    else {
+      const d = await fetchApi('/api/admin/keys', { method:'POST', body:JSON.stringify(body) });
+      toast('Customer created! Key: ' + d.key.slice(0,20) + '...');
+      document.getElementById('key-value').textContent = d.key;
+      document.getElementById('key-display').style.display = 'block';
+      document.getElementById('enabled-row').style.display = 'block';
+      document.getElementById('edit-enabled').checked = true;
+      _editId = d.id;
+      document.getElementById('edit-id').value = d.id;
+      document.getElementById('modal-title').textContent = 'Edit Customer';
+      document.getElementById('save-btn').textContent = 'Save Changes';
+    }
+    loadKeys();
+  } catch(e) { toast(e.message, 'err'); } finally { btn.disabled = false; }
+}
+
+async function deleteKey(id, name) {
+  if (!confirm('Delete customer "' + name + '"?\nThis will revoke their API key immediately.')) return;
+  try { await fetchApi('/api/admin/keys/'+id, { method:'DELETE' }); toast('Deleted'); loadKeys(); } catch(e) { toast(e.message,'err'); }
+}
+
+async function resetUsage(id) {
+  if (!confirm('Reset bandwidth and check counters for this customer?')) return;
+  try { await fetchApi('/api/admin/keys/'+id+'/reset-usage', { method:'POST' }); toast('Usage counters reset'); loadKeys(); } catch(e) { toast(e.message,'err'); }
+}
+
+async function resetKey() {
+  if (!_editId) return;
+  if (!confirm('Regenerate API key? The old key will stop working immediately.')) return;
+  try {
+    const d = await fetchApi('/api/admin/keys/'+_editId+'/reset', { method:'POST' });
+    document.getElementById('key-value').textContent = d.key;
+    toast('Key regenerated');
+    loadKeys();
+  } catch(e) { toast(e.message,'err'); }
+}
+
+function copyKey() { navigator.clipboard.writeText(document.getElementById('key-value').textContent).then(() => toast('API key copied!')); }
+function copyFullKey(key) { navigator.clipboard.writeText(key).then(() => toast('API key copied!')); }
+
+document.getElementById('edit-modal').addEventListener('click', e => { if (e.target === document.getElementById('edit-modal')) closeModal(); });
+loadBrand(); loadKeys();
+</script>
+</body>
+</html>

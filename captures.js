@@ -113,7 +113,10 @@ function summarize(f) {
 }
 
 // Express + WS plumbing
-function attach(app, server, requireVpnToken) {
+function attach(app, server, requireVpnToken, requireGatewayAccess, validateGatewayAccess) {
+  // Fallback no-op if host didn't provide the auth helper (backward compat)
+  if (typeof requireGatewayAccess !== 'function') requireGatewayAccess = (req,_res,next)=>next();
+
   // Internal ingest from mitmproxy addon (no auth except shared token; bound 127.0.0.1)
   app.post('/api/_internal/capture', (req, res) => {
     const tok = req.headers['x-capture-token'] || '';
@@ -247,7 +250,7 @@ function attach(app, server, requireVpnToken) {
   }
 
   // List captures with filters + pagination (no bodies, summary only)
-  app.get('/api/public/g/:name/captures', (req, res) => {
+  app.get('/api/public/g/:name/captures', requireGatewayAccess, (req, res) => {
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g,'');
     if (!name) return res.status(400).json({ error: 'bad name' });
     const lim = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
@@ -263,7 +266,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Detail of a single flow — only if it belongs to that gateway
-  app.get('/api/public/g/:name/captures/:id', (req, res) => {
+  app.get('/api/public/g/:name/captures/:id', requireGatewayAccess, (req, res) => {
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g,'');
     try {
       const row = db.prepare('SELECT * FROM flows WHERE id = ? AND gateway = ?').get(req.params.id, name);
@@ -275,7 +278,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Public: clear all flows for this gateway (no auth, scoped to single gateway)
-  app.delete('/api/public/g/:name/captures', (req, res) => {
+  app.delete('/api/public/g/:name/captures', requireGatewayAccess, (req, res) => {
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g,'');
     try {
       const r = db.prepare('DELETE FROM flows WHERE gateway = ?').run(name);
@@ -303,7 +306,7 @@ function attach(app, server, requireVpnToken) {
   }
 
   // Quick info — providers, env-key availability, presets
-  app.get('/api/public/g/:name/analyze/info', (req, res) => {
+  app.get('/api/public/g/:name/analyze/info', requireGatewayAccess, (req, res) => {
     const envKey = !!(process.env.LLM_API_KEY || process.env.OPENAI_API_KEY || process.env.GROQ_API_KEY || process.env.ANTHROPIC_API_KEY);
     res.json({
       rule_based: !!analyzer,
@@ -315,7 +318,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // List models for a given provider (BYOK in body)
-  app.post('/api/public/g/:name/analyze/models', async (req, res) => {
+  app.post('/api/public/g/:name/analyze/models', requireGatewayAccess, async (req, res) => {
     if (!analyzer) return res.status(500).json({ error: 'analyzer module not loaded' });
     try {
       const { provider, apiKey, baseURL } = req.body || {};
@@ -325,7 +328,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Rule-based analysis (with optional scope filters)
-  app.get('/api/public/g/:name/analyze', (req, res) => {
+  app.get('/api/public/g/:name/analyze', requireGatewayAccess, (req, res) => {
     if (!analyzer) return res.status(500).json({ error: 'analyzer module not loaded' });
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) return res.status(400).json({ error: 'bad name' });
@@ -335,7 +338,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // AI summary — BYOK in body, scope in body
-  app.post('/api/public/g/:name/analyze/ai', async (req, res) => {
+  app.post('/api/public/g/:name/analyze/ai', requireGatewayAccess, async (req, res) => {
     if (!analyzer) return res.status(500).json({ error: 'analyzer module not loaded' });
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) return res.status(400).json({ error: 'bad name' });
@@ -370,7 +373,7 @@ function attach(app, server, requireVpnToken) {
 
   // AI summary STREAM — Server-Sent Events. Body = giống /analyze/ai.
   // Client subscribe events: meta, auto_select, thinking, text, usage, note, done, error.
-  app.post('/api/public/g/:name/analyze/ai/stream', async (req, res) => {
+  app.post('/api/public/g/:name/analyze/ai/stream', requireGatewayAccess, async (req, res) => {
     if (!analyzer) { res.status(500).json({ error:'analyzer not loaded' }); return; }
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) { res.status(400).json({ error:'bad name' }); return; }
@@ -416,7 +419,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Auto-suggest model + estimate token without calling AI (cheap probe)
-  app.post('/api/public/g/:name/analyze/auto-suggest', (req, res) => {
+  app.post('/api/public/g/:name/analyze/auto-suggest', requireGatewayAccess, (req, res) => {
     if (!analyzer) return res.status(500).json({ error:'analyzer not loaded' });
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
     try {
@@ -448,7 +451,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Stats per gateway (last 1h)
-  app.get('/api/public/g/:name/stats', (req, res) => {
+  app.get('/api/public/g/:name/stats', requireGatewayAccess, (req, res) => {
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g,'');
     try {
       const cutoff = Date.now() - 3600_000;
@@ -462,7 +465,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Export: NDJSON streamed (one flow per line, full headers + base64 bodies). Best for big exports.
-  app.get('/api/public/g/:name/export.ndjson', (req, res) => {
+  app.get('/api/public/g/:name/export.ndjson', requireGatewayAccess, (req, res) => {
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g,'');
     const { where, params } = buildPublicWhere(name, req.query);
     const lim = Math.min(parseInt(req.query.limit, 10) || 100000, 100000);
@@ -485,7 +488,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Export: HAR 1.2 (compatible with Chrome DevTools, Postman, Insomnia, etc.)
-  app.get('/api/public/g/:name/export.har', (req, res) => {
+  app.get('/api/public/g/:name/export.har', requireGatewayAccess, (req, res) => {
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g,'');
     const { where, params } = buildPublicWhere(name, req.query);
     const lim = Math.min(parseInt(req.query.limit, 10) || 10000, 50000);
@@ -542,7 +545,7 @@ function attach(app, server, requireVpnToken) {
   });
 
   // Export: CSV (summary only, no bodies)
-  app.get('/api/public/g/:name/export.csv', (req, res) => {
+  app.get('/api/public/g/:name/export.csv', requireGatewayAccess, (req, res) => {
     const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g,'');
     const { where, params } = buildPublicWhere(name, req.query);
     const lim = Math.min(parseInt(req.query.limit, 10) || 50000, 100000);
@@ -558,6 +561,82 @@ function attach(app, server, requireVpnToken) {
       }
       res.end();
     } catch(e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // SSE: realtime system logs for a gateway
+  app.get('/api/public/g/:name/logs/stream', requireGatewayAccess, (req, res) => {
+    const name = String(req.params.name).replace(/[^a-zA-Z0-9_-]/g, '');
+    const svc  = (req.query.service || 'all').toLowerCase();
+    const lines = Math.min(parseInt(req.query.lines, 10) || 50, 500);
+
+    const gwDir  = `/etc/openvpn/gateways/${name}`;
+    if (!fs.existsSync(gwDir)) return res.status(404).json({ error: 'gateway not found' });
+
+    const ALLOWED = ['all', 'openvpn', 'tun2socks', 'dnsproxy', 'dnsmasq'];
+    if (!ALLOWED.includes(svc)) return res.status(400).json({ error: 'invalid service' });
+
+    res.setHeader('Content-Type',  'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection',    'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const { spawn } = require('child_process');
+    const procs = [];
+    const NOISE = /StartLimitIntervalSec|Unknown key name|ignored|systemd\[1\].*Starting|systemd\[1\].*Started|systemd\[1\].*Stopping|systemd\[1\].*Stopped|^--$/;
+
+    function sendLine(source, line) {
+      if (!line.trim() || NOISE.test(line)) return;
+      try { res.write(`data: ${JSON.stringify({ source, line, ts: Date.now() })}\n\n`); } catch(_) {}
+    }
+
+    function spawnJournalctl(units, source) {
+      const args = ['-f', '-n', String(lines), '--output=short-iso', '--no-pager'];
+      for (const u of units) args.push('-u', u);
+      const proc = spawn('journalctl', args);
+      let buf = '';
+      proc.stdout.on('data', d => {
+        buf += d.toString();
+        let idx;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          sendLine(source, buf.slice(0, idx));
+          buf = buf.slice(idx + 1);
+        }
+      });
+      proc.on('error', () => {});
+      procs.push(proc);
+    }
+
+    function spawnTail(file, source) {
+      const proc = spawn('tail', ['-n', String(lines), '-F', file]);
+      let buf = '';
+      proc.stdout.on('data', d => {
+        buf += d.toString();
+        let idx;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          sendLine(source, buf.slice(0, idx));
+          buf = buf.slice(idx + 1);
+        }
+      });
+      proc.on('error', () => {});
+      procs.push(proc);
+    }
+
+    const ovpnLog = `${gwDir}/openvpn.log`;
+    if (svc === 'openvpn' || svc === 'all') {
+      if (fs.existsSync(ovpnLog)) spawnTail(ovpnLog, 'openvpn');
+    }
+    if (svc === 'tun2socks' || svc === 'all') spawnJournalctl([`tun2socks@${name}`], 'tun2socks');
+    if (svc === 'dnsproxy'  || svc === 'all') spawnJournalctl([`dnsproxy@${name}`],  'dnsproxy');
+    if (svc === 'dnsmasq'   || svc === 'all') spawnJournalctl([`dnsmasq-gw@${name}`], 'dnsmasq');
+
+    // keep-alive ping every 20s
+    const ping = setInterval(() => { try { res.write(': ping\n\n'); } catch(_) {} }, 20000);
+
+    req.on('close', () => {
+      clearInterval(ping);
+      for (const p of procs) { try { p.kill('SIGTERM'); } catch(_) {} }
+    });
   });
 
   // WebSocket upgrade handler — supports both admin /ws/captures and public /ws/g/<name>
@@ -580,6 +659,16 @@ function attach(app, server, requireVpnToken) {
     const m = url.pathname.match(/^\/ws\/g\/([a-zA-Z0-9_-]+)$/);
     if (m) {
       const gw = m[1];
+      // Validate access: admin token OR API key with access to this gateway
+      if (typeof validateGatewayAccess === 'function') {
+        const auth = validateGatewayAccess(gw, {
+          token:  url.searchParams.get('token')   || req.headers['x-vpn-token'],
+          apiKey: url.searchParams.get('api_key') || req.headers['x-api-key'],
+        });
+        if (!auth.ok) {
+          socket.write(`HTTP/1.1 ${auth.status||401} Unauthorized\r\n\r\n`); socket.destroy(); return;
+        }
+      }
       wss.handleUpgrade(req, socket, head, (ws) => {
         if (!wsPublicByGw.has(gw)) wsPublicByGw.set(gw, new Set());
         wsPublicByGw.get(gw).add(ws);

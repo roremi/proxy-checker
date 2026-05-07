@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard — VPN Panel</title>
+  <style>
+    :root{--bg:#0a0f1e;--sb:#060c18;--s1:#0d1525;--s2:#111e33;--s3:#16263e;--b1:#1a2f4a;--b2:#1f3a5a;--t1:#e4eaf4;--t2:#8fa8c8;--t3:#4a6080;--bl:#3d7ef8;--bl2:#6da0fa;--gr:#16c87a;--rd:#f04a4a;--or:#f59e0b;--pu:#9b74f5;--cy:#22d3ee;--sw:220px}
+    *{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;display:flex;min-height:100vh}a{text-decoration:none;color:inherit}
+    .sb{width:var(--sw);flex-shrink:0;background:var(--sb);border-right:1px solid var(--b1);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:50;overflow:hidden}
+    .sb-logo{padding:18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1);flex-shrink:0}
+    .sb-icon{width:36px;height:36px;background:linear-gradient(135deg,#3d7ef8,#6da0fa);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 4px 12px rgba(61,126,248,.3)}
+    .sb-name{font-weight:700;font-size:14px;color:var(--t1);line-height:1.2}.sb-ver{font-size:10px;color:var(--t3);margin-top:1px}
+    .sb-nav{flex:1;padding:10px 8px;overflow-y:auto}.nav-sep{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:10px 8px 4px}
+    .nav-a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;color:var(--t2);font-size:13px;font-weight:500;margin-bottom:1px;transition:.15s all;cursor:pointer;border:1px solid transparent}
+    .nav-a:hover{background:var(--s2);color:var(--t1)}.nav-a.active{background:rgba(61,126,248,.12);color:var(--bl2);border-color:rgba(61,126,248,.18)}
+    .nav-a svg{width:16px;height:16px;flex-shrink:0;opacity:.7}.nav-a.active svg{opacity:1}
+    .sb-foot{padding:10px 8px;border-top:1px solid var(--b1);flex-shrink:0}
+    .sb-foot .nav-a{width:100%;background:none;border:none;font-family:inherit}
+    .main{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0}
+    .topbar{background:var(--sb);border-bottom:1px solid var(--b1);padding:0 28px;height:58px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+    .topbar-title{font-size:16px;font-weight:700;flex:1}.topbar-meta{font-size:12px;color:var(--t3)}
+    .topbar-ip{background:rgba(22,200,122,.1);border:1px solid rgba(22,200,122,.2);color:var(--gr);padding:4px 10px;border-radius:20px;font-size:11px;font-family:monospace}
+    .content{padding:24px 28px;flex:1}
+    .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+    .stat-card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:18px 20px;display:flex;align-items:flex-start;gap:14px;transition:.15s}
+    .stat-card:hover{border-color:var(--b2)}
+    .stat-ic{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+    .stat-body .lbl{font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+    .stat-body .val{font-size:26px;font-weight:800;color:var(--t1);line-height:1}
+    .stat-body .sub{font-size:11px;color:var(--t2);margin-top:5px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin-bottom:0;overflow:hidden}
+    .card-head{padding:14px 20px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .card-head h2{font-size:13px;font-weight:700;flex:1}
+    table{width:100%;border-collapse:collapse}
+    th{padding:9px 14px;text-align:left;font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--b1);background:var(--s2)}
+    td{padding:10px 14px;font-size:13px;border-bottom:1px solid rgba(26,47,74,.5);vertical-align:middle}
+    tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
+    .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+    .bg{background:rgba(22,200,122,.1);color:var(--gr);border:1px solid rgba(22,200,122,.2)}
+    .br{background:rgba(240,74,74,.1);color:var(--rd);border:1px solid rgba(240,74,74,.2)}
+    .bo{background:rgba(245,158,11,.1);color:var(--or);border:1px solid rgba(245,158,11,.2)}
+    .bb{background:rgba(61,126,248,.1);color:var(--bl2);border:1px solid rgba(61,126,248,.2)}
+    .bd{background:rgba(74,96,128,.1);color:var(--t3);border:1px solid rgba(74,96,128,.2)}
+    .dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:.15s all;font-family:inherit;white-space:nowrap}
+    .btn:hover{background:var(--s3);border-color:var(--b2)}.btn-primary{background:var(--bl);border-color:var(--bl);color:#fff}.btn-primary:hover{opacity:.9}
+    .btn-sm{padding:5px 10px;font-size:12px;border-radius:6px}
+    .prog{height:5px;background:var(--s3);border-radius:3px;overflow:hidden;margin-top:4px}
+    .prog-bar{height:100%;border-radius:3px}.prog-ok{background:var(--gr)}.prog-warn{background:var(--or)}.prog-full{background:var(--rd)}
+    .toast-wrap{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;max-width:360px}
+    .toast{background:var(--s2);border:1px solid var(--b2);color:var(--t1);padding:11px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);transition:.25s all;pointer-events:auto}
+    .toast.show{opacity:1;transform:translateY(0)}.toast.err{border-color:rgba(240,74,74,.4)}.toast.ok{border-color:rgba(22,200,122,.3)}
+    .empty{text-align:center;padding:40px 20px;color:var(--t3);font-size:13px}
+    .mono{font-family:'SF Mono',Consolas,monospace;font-size:12px}
+    .text-muted{color:var(--t2)}.text-dim{color:var(--t3)}.text-green{color:var(--gr)}.text-red{color:var(--rd)}
+    .text-sm{font-size:12px}.text-xs{font-size:11px}
+    ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+    /* Quick actions */
+    .quick-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+    .quick-btn{background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.15s;text-decoration:none;color:var(--t1)}
+    .quick-btn:hover{background:var(--s2);border-color:var(--b2)}
+    .quick-btn .qi{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .quick-btn .qt{font-size:13px;font-weight:600}.quick-btn .qs{font-size:11px;color:var(--t3);margin-top:1px}
+    /* Activity log */
+    .activity-item{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid rgba(26,47,74,.4)}
+    .activity-item:last-child{border-bottom:none}
+    .act-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+    .act-content{flex:1;min-width:0}.act-title{font-size:13px;font-weight:500}.act-time{font-size:11px;color:var(--t3);margin-top:2px}
+  </style>
+</head>
+<body>
+<aside class="sb">
+  <div class="sb-logo">
+    <div class="sb-icon">⚡</div>
+    <div><div class="sb-name" id="brand">VPN Panel</div><div class="sb-ver">Admin Console</div></div>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-sep">Overview</div>
+    <a href="/dashboard" class="nav-a active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>
+    <div class="nav-sep">Management</div>
+    <a href="/gateways" class="nav-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Gateways</a>
+    <a href="/keys" class="nav-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Customers</a>
+    <a href="/l2tp" class="nav-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>L2TP / IPSec</a>
+    <div class="nav-sep">Tools</div>
+    <a href="/index" class="nav-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Proxy Checker</a>
+    <a href="/captures" class="nav-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3L14.5 4z"/><circle cx="12" cy="13" r="3"/></svg>Captures</a>
+    <div class="nav-sep">System</div>
+    <a href="/settings" class="nav-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</a>
+  </nav>
+  <div class="sb-foot">
+    <button onclick="logout()" class="nav-a">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">Dashboard</div>
+    <span class="topbar-meta">Overview</span>
+    <span class="topbar-ip" id="srv-ip">—</span>
+  </div>
+  <div class="content">
+
+    <!-- Stats -->
+    <div class="stat-grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="stat-ic" style="background:rgba(61,126,248,.15)">🖥️</div>
+        <div class="stat-body"><div class="lbl">Gateways</div><div class="val" id="s-gw">—</div><div class="sub" id="s-gw-sub">Loading…</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-ic" style="background:rgba(22,200,122,.15)">👥</div>
+        <div class="stat-body"><div class="lbl">Customers</div><div class="val" id="s-keys">—</div><div class="sub" id="s-keys-sub">Loading…</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-ic" style="background:rgba(155,116,245,.15)">🔌</div>
+        <div class="stat-body"><div class="lbl">VPN Clients</div><div class="val" id="s-clients">—</div><div class="sub" id="s-clients-sub">Loading…</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-ic" style="background:rgba(245,158,11,.15)">📊</div>
+        <div class="stat-body"><div class="lbl">Bandwidth Used</div><div class="val" id="s-bw">—</div><div class="sub" id="s-bw-sub">Loading…</div></div>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-grid">
+      <a href="/gateways" class="quick-btn">
+        <div class="qi" style="background:rgba(61,126,248,.15)">⚡</div>
+        <div><div class="qt">Create Gateway</div><div class="qs">Add new VPN server</div></div>
+      </a>
+      <a href="/keys" class="quick-btn">
+        <div class="qi" style="background:rgba(22,200,122,.15)">🔑</div>
+        <div><div class="qt">Add Customer</div><div class="qs">Issue new API key</div></div>
+      </a>
+      <a href="/l2tp" class="quick-btn">
+        <div class="qi" style="background:rgba(155,116,245,.15)">🛡️</div>
+        <div><div class="qt">L2TP / IPSec</div><div class="qs">Manage VPN users</div></div>
+      </a>
+      <a href="/index" class="quick-btn">
+        <div class="qi" style="background:rgba(245,158,11,.15)">🔍</div>
+        <div><div class="qt">Proxy Checker</div><div class="qs">Test proxy quality</div></div>
+      </a>
+    </div>
+
+    <!-- Tables row -->
+    <div class="grid-2">
+      <!-- Gateways -->
+      <div class="card">
+        <div class="card-head">
+          <h2>🖥️ Gateway Status</h2>
+          <a href="/gateways" class="btn btn-sm">Manage →</a>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Status</th><th>Exit IP</th><th>Clients</th></tr></thead>
+          <tbody id="gw-tbody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- Keys -->
+      <div class="card">
+        <div class="card-head">
+          <h2>👥 Customer Accounts</h2>
+          <a href="/keys" class="btn btn-sm">Manage →</a>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Status</th><th>Checks Used</th><th>Expires</th></tr></thead>
+          <tbody id="keys-tbody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+  const _tok = localStorage.getItem('_admin_token');
+  if (!_tok) location.replace('/login');
+
+  async function fetchApi(url, opts = {}) {
+    opts.headers = { ...(opts.headers || {}), 'x-vpn-token': _tok, 'Content-Type': 'application/json' };
+    let r;
+    try { r = await fetch(url, opts); } catch(e) { throw new Error('Network error: ' + e.message); }
+    if (r.status === 401) { logout(); throw new Error('Session expired'); }
+    const txt = await r.text();
+    let d = {}; try { d = txt ? JSON.parse(txt) : {}; } catch(_) { d = { raw: txt }; }
+    if (!r.ok) throw new Error(d.error || d.raw || r.statusText);
+    return d;
+  }
+
+  function logout() { localStorage.removeItem('_admin_token'); location.replace('/login'); }
+
+  function toast(msg, type = 'ok') {
+    const w = document.getElementById('toasts');
+    const el = document.createElement('div'); el.className = 'toast ' + type; el.textContent = msg;
+    w.appendChild(el); requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 4000);
+  }
+
+  function fmtBytes(b) {
+    if (!b || b === 0) return '0 B';
+    const u = ['B','KB','MB','GB','TB']; let i = 0;
+    while (b >= 1024 && i < 4) { b /= 1024; i++; }
+    return b.toFixed(i > 1 ? 1 : 0) + ' ' + u[i];
+  }
+
+  function fmtDate(d) {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (dt < new Date()) return '<span class="text-red">Expired</span>';
+    return dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  async function loadDashboard() {
+    try {
+      const [stats, gws, keys] = await Promise.all([
+        fetchApi('/api/admin/stats'),
+        fetchApi('/api/gateways'),
+        fetchApi('/api/admin/keys'),
+      ]);
+
+      // Update brand
+      document.getElementById('brand').textContent = stats.brand_name || 'VPN Panel';
+      document.title = 'Dashboard — ' + (stats.brand_name || 'VPN Panel');
+      document.getElementById('srv-ip').textContent = stats.server_ip;
+
+      // Stats cards
+      document.getElementById('s-gw').textContent = stats.gateways.total;
+      document.getElementById('s-gw-sub').innerHTML =
+        `<span class="text-green">▲ ${stats.gateways.running} running</span> · ${stats.gateways.stopped} stopped`;
+
+      document.getElementById('s-keys').textContent = stats.keys.total;
+      document.getElementById('s-keys-sub').innerHTML =
+        `<span class="text-green">${stats.keys.active} active</span>` +
+        (stats.keys.expired ? ` · <span class="text-red">${stats.keys.expired} expired</span>` : '');
+
+      document.getElementById('s-clients').textContent = stats.clients.total;
+      document.getElementById('s-clients-sub').textContent =
+        `${stats.clients.openvpn} OpenVPN · ${stats.clients.l2tp} L2TP`;
+
+      document.getElementById('s-bw').textContent = fmtBytes(stats.usage.bandwidth_bytes);
+      document.getElementById('s-bw-sub').textContent = `${stats.usage.checks.toLocaleString()} proxy checks`;
+
+      // Gateway table
+      const gwList = gws.gateways || [];
+      const gwTbody = document.getElementById('gw-tbody');
+      if (gwList.length === 0) {
+        gwTbody.innerHTML = '<tr><td colspan="4" class="empty">No gateways configured</td></tr>';
+      } else {
+        gwTbody.innerHTML = gwList.slice(0, 8).map(gw => `
+          <tr>
+            <td><strong>${esc(gw.name)}</strong></td>
+            <td>${gw.running ? '<span class="badge bg"><span class="dot"></span>Running</span>' : '<span class="badge br"><span class="dot"></span>Stopped</span>'}</td>
+            <td class="mono text-muted">${esc(gw.exit_ip || '—')}</td>
+            <td>${gw.client_count || 0}</td>
+          </tr>`).join('');
+      }
+
+      // Keys table
+      const keyList = keys.keys || [];
+      const keyTbody = document.getElementById('keys-tbody');
+      if (keyList.length === 0) {
+        keyTbody.innerHTML = '<tr><td colspan="4" class="empty">No customer accounts</td></tr>';
+      } else {
+        const now = new Date();
+        keyTbody.innerHTML = keyList.slice(0, 8).map(k => {
+          const expired = k.expires_at && new Date(k.expires_at) < now;
+          const pct = k.proxy_check_limit ? Math.min(100, (k.proxy_checks_used / k.proxy_check_limit) * 100) : 0;
+          const statusBadge = !k.enabled ? '<span class="badge bd">Disabled</span>' :
+            expired ? '<span class="badge br">Expired</span>' :
+            '<span class="badge bg">Active</span>';
+          return `<tr>
+            <td><strong>${esc(k.name)}</strong></td>
+            <td>${statusBadge}</td>
+            <td>
+              ${k.proxy_check_limit ? `${k.proxy_checks_used}/${k.proxy_check_limit}` : k.proxy_checks_used + ' used'}
+              ${k.proxy_check_limit ? `<div class="prog"><div class="prog-bar ${pct>90?'prog-full':pct>70?'prog-warn':'prog-ok'}" style="width:${pct}%"></div></div>` : ''}
+            </td>
+            <td class="text-sm">${fmtDate(k.expires_at)}</td>
+          </tr>`;
+        }).join('');
+      }
+
+    } catch(e) {
+      toast('Failed to load dashboard: ' + e.message, 'err');
+    }
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>

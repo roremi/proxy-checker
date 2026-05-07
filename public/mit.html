@@ -401,90 +401,17 @@ const NAME = (params.get('name') || '').replace(/[^a-zA-Z0-9_-]/g,'');
 let info = null;
 let ws = null;
 
-// ─── Auth: admin token (localStorage) hoặc API key của khách (URL ?api_key= hoặc sessionStorage) ───
-// Persist api_key from URL into sessionStorage (per-tab) and strip it from the address bar.
-(function persistApiKey(){
-  const k = params.get('api_key');
-  if (k) {
-    try { sessionStorage.setItem('_g_api_key_'+NAME, k); } catch(_){}
-    // Remove api_key from URL so user can't accidentally share it
-    const u = new URL(location.href);
-    u.searchParams.delete('api_key');
-    history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
-  }
-})();
-function getAuth() {
-  let token = '';
-  try { token = localStorage.getItem('_admin_token') || ''; } catch(_){}
-  let apiKey = '';
-  try { apiKey = sessionStorage.getItem('_g_api_key_'+NAME) || ''; } catch(_){}
-  if (!apiKey) {
-    try { apiKey = localStorage.getItem('_customer_key') || ''; } catch(_){}
-  }
-  return { token, apiKey };
-}
-function authHeaders(extra) {
-  const { token, apiKey } = getAuth();
-  const h = Object.assign({}, extra || {});
-  if (token)  h['x-vpn-token'] = token;
-  if (apiKey) h['x-api-key']   = apiKey;
-  return h;
-}
-function withAuth(url) {
-  // Append credentials as query string (used for browser navigation downloads + WS)
-  const { token, apiKey } = getAuth();
-  const sep = url.includes('?') ? '&' : '?';
-  const parts = [];
-  if (token)  parts.push('token='   + encodeURIComponent(token));
-  if (apiKey) parts.push('api_key=' + encodeURIComponent(apiKey));
-  return parts.length ? (url + sep + parts.join('&')) : url;
-}
-// Monkey-patch fetch to auto-attach auth headers when calling our protected API.
-(function(){
-  const _f = window.fetch.bind(window);
-  window.fetch = function(input, init) {
-    try {
-      const url = (typeof input === 'string') ? input : (input && input.url) || '';
-      const needsAuth = url.startsWith(`/api/public/g/${NAME}`);
-      if (needsAuth) {
-        init = init || {};
-        init.headers = authHeaders(init.headers || {});
-      }
-    } catch(_){}
-    return _f(input, init);
-  };
-})();
-function showAccessDenied(msg) {
-  const el = document.getElementById('not-found');
-  el.style.display = 'block';
-  el.innerHTML = '<strong>🔒 Truy cập bị từ chối</strong><br>' +
-    (msg || 'Bạn không có quyền quản lý gateway này.') +
-    '<br><br>Vui lòng mở trang này từ <a href="/portal" style="color:var(--blue)">Portal khách hàng</a> ' +
-    'hoặc <a href="/login" style="color:var(--blue)">đăng nhập admin</a>.';
-}
-
 if (!NAME) {
   document.getElementById('not-found').style.display='block';
 } else {
-  const { token, apiKey } = getAuth();
-  if (!token && !apiKey) {
-    showAccessDenied('Thiếu thông tin xác thực (api_key hoặc admin token).');
-  } else {
-    document.getElementById('title').textContent = `Gateway: ${NAME}`;
-    loadInfo();
-    setInterval(loadInfo, 10000);
-  }
+  document.getElementById('title').textContent = `Gateway: ${NAME}`;
+  loadInfo();
+  setInterval(loadInfo, 10000);
 }
 
 async function loadInfo() {
   try {
     const r = await fetch(`/api/public/g/${NAME}/info`);
-    if (r.status === 401 || r.status === 403) {
-      let msg = '';
-      try { msg = (await r.json()).error || ''; } catch(_){}
-      showAccessDenied(msg);
-      return;
-    }
     if (r.status === 404) {
       document.getElementById('not-found').style.display='block';
       return;
@@ -684,7 +611,7 @@ function exportLogs(format) {
   const u = filterQuery();
   u.set('limit', format === 'ndjson' ? '100000' : (format === 'har' ? '10000' : '50000'));
   const url = `/api/public/g/${NAME}/export.${format}?${u}`;
-  window.location.href = withAuth(url);   // browser will download
+  window.location.href = url;   // browser will download
 }
 
 async function clearLogs() {
@@ -769,7 +696,7 @@ function decodeBody(b64) {
 // WebSocket realtime
 function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}` + withAuth(`/ws/g/${NAME}`));
+  ws = new WebSocket(`${proto}://${location.host}/ws/g/${NAME}`);
   const dot = document.getElementById('ws-dot');
   const stat = document.getElementById('ws-status');
   ws.onopen = () => { dot.classList.add('on'); stat.textContent = 'live'; };

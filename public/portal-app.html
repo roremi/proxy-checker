@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Proxy to VPN</title>
+<style>
+:root{--bg:#0a0f1e;--sb:#060c18;--s1:#0d1525;--s2:#111e33;--s3:#16263e;--b1:#1a2f4a;--b2:#1f3a5a;--t1:#e4eaf4;--t2:#8fa8c8;--t3:#4a6080;--bl:#3d7ef8;--bl2:#6da0fa;--gr:#16c87a;--rd:#f04a4a;--or:#f59e0b;--pu:#9b74f5;--sw:220px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;display:flex;min-height:100vh}
+a{text-decoration:none;color:inherit}
+/* Sidebar */
+.sb{width:var(--sw);flex-shrink:0;background:var(--sb);border-right:1px solid var(--b1);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:50}
+.sb-logo{padding:18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1)}
+.sb-icon{width:36px;height:36px;background:linear-gradient(135deg,#3d7ef8,#9b74f5);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(61,126,248,.3)}
+.sb-name{font-weight:700;font-size:14px;line-height:1.2}.sb-ver{font-size:10px;color:var(--t3);margin-top:1px}
+.sb-nav{flex:1;padding:10px 8px;overflow-y:auto}
+.nav-sep{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:10px 8px 4px}
+.nav-a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;color:var(--t2);font-size:13px;font-weight:500;margin-bottom:1px;transition:.15s;cursor:pointer;border:1px solid transparent}
+.nav-a:hover{background:var(--s2);color:var(--t1)}.nav-a.active{background:rgba(61,126,248,.12);color:var(--bl2);border-color:rgba(61,126,248,.18)}
+.nav-a svg{width:16px;height:16px;flex-shrink:0;opacity:.7}.nav-a.active svg{opacity:1}
+.nav-a.hidden{display:none!important}
+.sb-foot{padding:10px 8px;border-top:1px solid var(--b1)}
+/* Main */
+.main{margin-left:var(--sw);flex:1;display:flex;flex-direction:column;min-height:100vh;min-width:0}
+.topbar{background:var(--sb);border-bottom:1px solid var(--b1);padding:0 28px;height:58px;display:flex;align-items:center;gap:12px}
+.topbar-title{font-size:16px;font-weight:700;flex:1}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid;white-space:nowrap}
+.bg{background:rgba(22,200,122,.1);color:var(--gr);border-color:rgba(22,200,122,.2)}
+.br{background:rgba(240,74,74,.1);color:var(--rd);border-color:rgba(240,74,74,.2)}
+.bo{background:rgba(245,158,11,.1);color:var(--or);border-color:rgba(245,158,11,.2)}
+.bd{background:rgba(74,96,128,.1);color:var(--t3);border-color:rgba(74,96,128,.2)}
+.bp{background:rgba(155,116,245,.1);color:var(--pu);border-color:rgba(155,116,245,.2)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block}
+.content{padding:24px 28px;flex:1}
+.section{display:none}.section.active{display:block}
+/* Cards */
+.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.card-head{padding:13px 18px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.card-head h2{font-size:13px;font-weight:700;flex:1}
+.card-body{padding:18px}
+/* Hero */
+.hero{background:linear-gradient(135deg,rgba(61,126,248,.08),rgba(155,116,245,.06));border:1px solid rgba(61,126,248,.15);border-radius:14px;padding:24px;margin-bottom:16px}
+.hero h1{font-size:20px;font-weight:800;margin-bottom:6px}
+.hero p{color:var(--t2);font-size:13px;line-height:1.7;max-width:580px}
+.steps{display:flex;gap:0;margin-top:18px;flex-wrap:wrap}
+.step{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:160px}
+.step-num{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--bl),var(--pu));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0;margin-top:1px}
+.step-body .step-title{font-size:12px;font-weight:700;margin-bottom:2px}
+.step-body .step-desc{font-size:11px;color:var(--t3);line-height:1.5}
+.step-arrow{display:flex;align-items:center;padding:0 6px;color:var(--t3);font-size:16px;align-self:center;flex-shrink:0}
+/* Stats */
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
+.stat-card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:16px 18px}
+.stat-card .v{font-size:24px;font-weight:800;margin-bottom:3px}
+.stat-card .l{font-size:11px;color:var(--t3);text-transform:uppercase;font-weight:600}
+/* Table */
+table{width:100%;border-collapse:collapse}
+th{padding:8px 14px;text-align:left;font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--b1);background:var(--s2);white-space:nowrap}
+td{padding:9px 14px;font-size:13px;border-bottom:1px solid rgba(26,47,74,.5);vertical-align:middle}
+tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:.15s;font-family:inherit;white-space:nowrap}
+.btn:hover{background:var(--s3);border-color:var(--b2)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--bl);border-color:var(--bl);color:#fff}.btn-primary:hover{opacity:.9}
+.btn-danger{border-color:rgba(240,74,74,.25);color:var(--rd)}.btn-danger:hover{background:rgba(240,74,74,.1)}
+.btn-green{border-color:rgba(22,200,122,.25);color:var(--gr)}.btn-green:hover{background:rgba(22,200,122,.1)}
+.btn-warn{border-color:rgba(245,158,11,.25);color:var(--or)}.btn-warn:hover{background:rgba(245,158,11,.1)}
+.btn-purple{border-color:rgba(155,116,245,.25);color:var(--pu)}.btn-purple:hover{background:rgba(155,116,245,.1)}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px}.btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
+.btn-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+/* Forms */
+.fg{margin-bottom:14px}.fg label{display:block;font-size:11px;color:var(--t2);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+input[type=text],input[type=password],input[type=number],select,textarea{width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--t1);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;transition:.15s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--bl);box-shadow:0 0 0 3px rgba(61,126,248,.1)}
+::placeholder{color:var(--t3)}
+textarea{resize:vertical}
+/* Proxy input area */
+.proxy-input-big{font-family:monospace;font-size:12px;height:100px}
+/* Info box */
+.inforow{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}
+.infobox{background:var(--s2);border:1px solid var(--b1);border-radius:7px;padding:10px 12px}
+.infobox .lbl{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-bottom:3px}
+.infobox .val{font-family:monospace;font-size:13px;font-weight:700;word-break:break-all}
+/* Key box */
+.key-box{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-family:monospace;font-size:11px;word-break:break-all;color:var(--bl2);line-height:1.5;max-height:200px;overflow-y:auto;white-space:pre-wrap}
+/* Proxy VPN card */
+.pvpn-card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.pvpn-head{padding:14px 18px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pvpn-head-info{flex:1;min-width:0}
+.pvpn-name{font-size:14px;font-weight:700;margin-bottom:2px}
+.pvpn-proxy{font-family:monospace;font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
+.pvpn-body{padding:16px 18px}
+.clients-table-wrap{border:1px solid var(--b1);border-radius:8px;overflow:hidden;margin-top:10px}
+/* Cred card */
+.cred-card{background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.cred-card h4{font-size:13px;font-weight:700;margin-bottom:10px}
+.cred-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.cred-field .lbl{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-bottom:2px}
+.cred-field .val{font-family:monospace;font-size:12px;font-weight:700;word-break:break-all}
+/* Modal */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;align-items:center;justify-content:center;padding:20px}
+.overlay.open{display:flex}
+.modal{background:var(--s1);border:1px solid var(--b2);border-radius:14px;width:100%;max-width:520px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--b1);flex-shrink:0;display:flex;align-items:center;justify-content:space-between}
+.modal-head h3{font-size:14px;font-weight:700}
+.close-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;color:var(--t3);background:none;border:none;font-size:20px;transition:.15s}
+.close-btn:hover{background:var(--s2);color:var(--t1)}
+.modal-body{padding:20px;overflow-y:auto;flex:1}
+.modal-foot{padding:12px 20px;border-top:1px solid var(--b1);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
+/* Progress */
+.prog-wrap{height:6px;background:var(--s3);border-radius:99px;overflow:hidden;margin-top:8px}
+.prog-bar-inner{height:100%;border-radius:99px;transition:width .3s}
+/* Checker */
+.fbtn{padding:3px 11px;border-radius:20px;border:1px solid var(--b1);background:transparent;color:var(--t3);font-size:12px;cursor:pointer;transition:.15s;font-family:inherit}
+.fbtn.on{background:var(--bl);border-color:var(--bl);color:#fff;font-weight:600}
+.fbtn:hover:not(.on){background:var(--s2);color:var(--t1)}
+.stats-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.stat{display:flex;align-items:center;gap:5px;font-size:13px}.stat-n{font-weight:600;font-size:15px}
+/* Checker — admin-equivalent */
+.chk-g2{display:grid;grid-template-columns:1fr 260px;gap:16px}
+@media(max-width:760px){.chk-g2{grid-template-columns:1fr}}
+.chk-lbl{font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
+#proxy-input.chk-ta{width:100%;height:164px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-family:monospace;font-size:12px;padding:10px 12px;resize:vertical;outline:none}
+#proxy-input.chk-ta:focus{border-color:var(--bl)}
+.chk-field{margin-bottom:10px}
+.chk-field label{display:block;font-size:12px;color:var(--t2);margin-bottom:4px}
+.chk-field input{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:13px;padding:7px 10px;outline:none}
+.chk-field input:focus{border-color:var(--bl)}
+.flt-active-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--bl);color:#fff;font-size:10px;font-weight:700;margin-left:4px}
+.flt-panel{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:none}
+.flt-panel.open{display:block}
+.flt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-items:end}
+.flt-group{display:flex;flex-direction:column;gap:3px}
+.flt-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--t2)}
+.flt-input{background:var(--s1);border:1px solid var(--b1);color:var(--t1);font-size:12px;padding:4px 8px;border-radius:5px;outline:none;width:100%;box-sizing:border-box;font-family:inherit}
+.flt-input:focus{border-color:var(--bl)}
+.flt-row2{grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.flt-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;border:1px solid var(--b1);background:transparent;color:var(--t2);font-size:11px;cursor:pointer;user-select:none}
+.flt-chip input{margin:0;cursor:pointer;accent-color:var(--bl)}
+.flt-chip:has(input:checked){border-color:var(--bl);background:rgba(61,126,248,.1);color:var(--bl2)}
+.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--b1)}
+.tbl-wrap table{font-size:13px}
+.tbl-wrap thead{position:sticky;top:0;z-index:10}
+.tbl-wrap thead th{background:var(--s2);color:var(--t2);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:9px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--b1)}
+.tbl-wrap tbody tr{border-bottom:1px solid var(--b1);transition:background .1s;cursor:pointer}
+.tbl-wrap tbody tr:hover,.tbl-wrap tbody tr.exp{background:var(--s2)}
+.tbl-wrap td{padding:7px 10px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;font-size:13px;border:none}
+.tbl-wrap td.mono{font-family:monospace;font-size:11px}
+.chk-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;border:1px solid}
+.chk-badge.ok{background:rgba(22,200,122,.12);color:var(--gr);border-color:rgba(22,200,122,.25)}
+.chk-badge.err{background:rgba(240,74,74,.12);color:var(--rd);border-color:rgba(240,74,74,.25)}
+.os{display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500}
+.os-win{background:rgba(88,166,255,.12);color:#79c0ff}
+.os-lin{background:rgba(245,158,11,.12);color:var(--or)}
+.os-and{background:rgba(22,200,122,.12);color:var(--gr)}
+.os-oth{background:rgba(139,148,158,.12);color:var(--t2)}
+.lat-f{color:var(--gr)}.lat-m{color:var(--or)}.lat-s{color:var(--rd)}
+.drow td{padding:0!important}
+.dcontent{padding:16px;background:#080d18;border-top:1px solid var(--b1);display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.dcontent>div{min-width:0;overflow:hidden}
+.dsec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--bl2);margin-bottom:7px}
+.ditem{margin-bottom:4px;min-width:0}
+.dkey{font-size:11px;color:var(--t2);white-space:nowrap}
+.dval{font-size:12px;color:var(--t1);word-break:break-word;overflow-wrap:anywhere;display:inline}
+.dval.mono{font-family:monospace;font-size:11px}
+.sc-low{color:#3fb950;font-weight:600}
+.sc-medium{color:var(--or);font-weight:600}
+.sc-high{color:var(--rd);font-weight:600}
+.sc-very_high{color:var(--rd);font-weight:700}
+.sc-flag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:600}
+.sc-yes{background:rgba(240,74,74,.15);color:var(--rd)}
+.sc-no{background:rgba(22,200,122,.1);color:var(--gr)}
+.lib-panel{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:14px 16px;margin-top:10px}
+.lib-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.lib-title{font-size:12px;font-weight:700;color:var(--t1)}
+.lib-list{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto}
+.lib-item{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--s1);border:1px solid var(--b1);border-radius:5px;font-size:12px}
+.lib-item-proxy{flex:1;color:var(--t1);font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.lib-item-meta{font-size:11px;color:var(--t2);white-space:nowrap}
+.lib-item-risk{font-size:11px;font-weight:600;white-space:nowrap}
+.lib-item-tags{font-size:10px;color:var(--t2);white-space:nowrap}
+.lib-del{padding:0 5px!important;font-size:14px;line-height:1;opacity:.5;background:none;border:none;color:var(--t2);cursor:pointer}
+.lib-del:hover{opacity:1;color:var(--rd)}
+.lib-empty{text-align:center;padding:20px;color:var(--t2);font-size:12px}
+/* Setup instructions */
+.setup-box{background:var(--s3);border:1px solid var(--b2);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--t2);line-height:1.9;margin-top:10px}
+.setup-box strong{color:var(--t1)}
+/* Misc */
+.empty{text-align:center;padding:36px;color:var(--t3);font-size:13px}
+.text-dim{color:var(--t3)}.text-xs{font-size:11px}.text-sm{font-size:12px}
+.text-green{color:var(--gr)}.text-blue{color:var(--bl2)}.text-orange{color:var(--or)}.text-purple{color:var(--pu)}
+.mono{font-family:monospace;font-size:12px}
+.hint{font-size:11px;color:var(--t3);margin-top:4px;line-height:1.6}
+.alert{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
+.alert-info{background:rgba(61,126,248,.08);border:1px solid rgba(61,126,248,.2);color:var(--bl2)}
+.alert-ok{background:rgba(22,200,122,.08);border:1px solid rgba(22,200,122,.2);color:var(--gr)}
+.alert-err{background:rgba(240,74,74,.08);border:1px solid rgba(240,74,74,.2);color:var(--rd)}
+/* Toast */
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;max-width:360px}
+.toast{background:var(--s2);border:1px solid var(--b2);color:var(--t1);padding:11px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);transition:.25s all;pointer-events:auto}
+.toast.show{opacity:1;transform:translateY(0)}.toast.err{border-color:rgba(240,74,74,.4)}.toast.ok{border-color:rgba(22,200,122,.3)}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+/* Skeleton loader */
+@keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
+.skeleton{background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 30%,var(--s2) 60%);background-size:600px 100%;animation:shimmer 1.4s ease-in-out infinite;border-radius:6px}
+.skel-card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:20px;margin-bottom:12px}
+.skel-row{height:12px;margin-bottom:10px}.skel-row.w100{width:100%}.skel-row.w60{width:60%}.skel-row.w40{width:40%}.skel-row.w30{width:30%}
+.skel-tag{height:10px;width:70px;display:inline-block;border-radius:20px;margin-right:6px}
+.skel-btn{height:28px;width:90px;border-radius:7px;display:inline-block}
+/* Confirm modal */
+.confirm-modal-wrap{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);opacity:0;visibility:hidden;transition:.2s all}
+.confirm-modal-wrap.open{opacity:1;visibility:visible}
+.confirm-modal{background:var(--s1);border:1px solid var(--b2);border-radius:14px;width:100%;max-width:380px;padding:0;box-shadow:0 30px 80px rgba(0,0,0,.6);transform:scale(.95) translateY(10px);transition:.2s all}
+.confirm-modal-wrap.open .confirm-modal{transform:scale(1) translateY(0)}
+.confirm-icon{width:54px;height:54px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 14px}
+.confirm-body{padding:28px;text-align:center}
+.confirm-body h3{font-size:15px;font-weight:700;margin-bottom:8px}
+.confirm-body p{font-size:13px;color:var(--t2);line-height:1.6}
+.confirm-foot{padding:14px 20px;border-top:1px solid var(--b1);display:flex;gap:8px;justify-content:flex-end}
+/* Page loading overlay */
+.page-loader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:.2s}
+.page-loader.show{opacity:1;pointer-events:all}
+.spin{width:28px;height:28px;border:3px solid var(--b2);border-top-color:var(--bl);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Guide nav link */
+.nav-a.guide{color:var(--or)}
+.nav-a.guide svg{color:var(--or);opacity:1}
+.btn-outline{background:transparent;border-color:var(--b2);color:var(--t1)}.btn-outline:hover{background:var(--s2)}
+</style>
+</head>
+<body>
+<aside class="sb">
+  <div class="sb-logo">
+    <div class="sb-icon">&#9889;</div>
+    <div><div class="sb-name" id="brand">Proxy to VPN</div><div class="sb-ver">Customer Portal</div></div>
+  </div>
+  <nav class="sb-nav">
+    <div class="nav-sep">My Account</div>
+    <a class="nav-a active" id="nav-home" onclick="showSection('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</a>
+    <div class="nav-sep hidden" id="sep-vpn">VPN Tunnels</div>
+    <a class="nav-a hidden" id="nav-proxies" onclick="showSection('proxies')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>My Proxies → VPN</a>
+    <a class="nav-a hidden" id="nav-l2tp" onclick="showSection('l2tp')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>L2TP / IPSec</a>
+    <div class="nav-sep hidden" id="sep-tools">Tools</div>
+    <a class="nav-a hidden" id="nav-checker" onclick="showSection('checker')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Proxy Checker</a>
+    <a class="nav-a hidden guide" id="nav-guide" onclick="showSection('guide')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Setup Guide
+    </a>
+  </nav>
+  <div class="sb-foot">
+    <a href="/home" class="nav-a" style="color:var(--bl2);border-color:rgba(61,126,248,.15);background:rgba(61,126,248,.07)" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      VPN Portal Page
+    </a>
+    <button onclick="logout()" class="nav-a" style="width:100%;background:none;border:none;font-family:inherit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign Out</button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <span style="font-size:12px;color:var(--t2)" id="topbar-user"></span>
+    <span class="badge bg" id="topbar-badge" style="display:none"><span class="dot"></span>Active</span>
+    <a href="/home" target="_blank" class="btn btn-sm" style="background:rgba(61,126,248,.1);border-color:rgba(61,126,248,.2);color:var(--bl2);margin-left:auto">&#127760; VPN Page</a>
+  </div>
+  <div class="content">
+
+    <!-- ── Dashboard ── -->
+    <div class="section active" id="sec-home">
+      <div class="hero">
+        <h1>&#127760; Turn Your Proxy Into a VPN</h1>
+        <p>Add any HTTP or SOCKS5 proxy — we route it through our server and give you a VPN config you can use on any device: Windows, macOS, iOS, Android, Linux.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">Add Proxy</div>
+              <div class="step-desc">Paste your proxy URL (HTTP, SOCKS5)</div>
+            </div>
+          </div>
+          <div class="step-arrow">&#8594;</div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">We Build a Tunnel</div>
+              <div class="step-desc">System creates a VPN gateway using your proxy</div>
+            </div>
+          </div>
+          <div class="step-arrow">&#8594;</div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">Download Config</div>
+              <div class="step-desc">Get .ovpn or L2TP credentials</div>
+            </div>
+          </div>
+          <div class="step-arrow">&#8594;</div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <div class="step-title">Connect</div>
+              <div class="step-desc">Use on any device, any OS</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="stat-row" id="dash-stats"></div>
+      <div class="card">
+        <div class="card-head"><h2>&#128273; API Key</h2></div>
+        <div class="card-body">
+          <div style="display:flex;gap:6px">
+            <input type="password" id="key-display" style="flex:1;font-family:monospace" disabled>
+            <button class="btn btn-sm" onclick="toggleKey()">Show</button>
+            <button class="btn btn-sm" onclick="copyKey()">&#128203; Copy</button>
+          </div>
+          <p class="hint">Use header <code style="background:var(--s3);padding:1px 6px;border-radius:4px;font-family:monospace">x-api-key: &lt;key&gt;</code> to access APIs directly.</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>&#128506; Permissions</h2></div>
+        <div class="card-body" id="dash-perms"></div>
+      </div>
+    </div>
+
+    <!-- ── My Proxies → VPN ── -->
+    <div class="section" id="sec-proxies">
+      <div id="proxies-content"></div>
+    </div>
+
+    <!-- ── L2TP ── -->
+    <div class="section" id="sec-l2tp">
+      <div id="l2tp-info"></div>
+      <div id="l2tp-content"></div>
+    </div>
+
+    <!-- ── Proxy Checker (admin-equivalent) ── -->
+    <div class="section" id="sec-checker">
+      <!-- Input panel -->
+      <div class="card"><div class="card-body">
+        <div class="chk-g2">
+          <div>
+            <div class="chk-lbl"><span>Proxy List</span><span id="proxy-count" style="font-weight:400;font-size:11px">0 proxies</span></div>
+            <textarea id="proxy-input" class="chk-ta" placeholder="One proxy per line:&#10;127.0.0.1:1080&#10;socks5://user:pass@host:port&#10;http://host:port&#10;host:port:user:pass"></textarea>
+            <div style="margin-top:5px;font-size:11px;color:var(--t2)">
+              Supported: <code style="background:var(--s3);padding:1px 5px;border-radius:3px">host:port</code> &nbsp;·&nbsp; <code style="background:var(--s3);padding:1px 5px;border-radius:3px">socks5://host:port</code> &nbsp;·&nbsp; <code style="background:var(--s3);padding:1px 5px;border-radius:3px">http://user:pass@host:port</code> &nbsp;·&nbsp; <code style="background:var(--s3);padding:1px 5px;border-radius:3px">host:port:user:pass</code>
+            </div>
+          </div>
+          <div>
+            <div class="chk-field"><label for="concurrency">Concurrency (1–50)</label><input id="concurrency" type="number" value="5" min="1" max="50"></div>
+            <div class="chk-field"><label for="timeout">Timeout (seconds)</label><input id="timeout" type="number" value="30" min="5" max="120"></div>
+            <div class="btn-row" style="margin-top:12px">
+              <button id="btn-check" class="btn btn-primary" onclick="startCheck()">▶ Check Proxies</button>
+              <button id="btn-stop" class="btn btn-danger btn-sm" onclick="stopCheck()" disabled>■ Stop</button>
+            </div>
+          </div>
+        </div>
+      </div></div>
+
+      <!-- Progress -->
+      <div id="prog-card" class="card" style="display:none"><div class="card-body">
+        <div class="stats-row">
+          <div class="stat"><span class="dot" style="width:8px;height:8px;background:var(--bl)"></span>Total: <span id="s-total" class="stat-n">0</span></div>
+          <div class="stat"><span class="dot" style="width:8px;height:8px;background:var(--gr)"></span>OK: <span id="s-ok" class="stat-n">0</span></div>
+          <div class="stat"><span class="dot" style="width:8px;height:8px;background:var(--rd)"></span>Error: <span id="s-err" class="stat-n">0</span></div>
+          <div class="stat"><span class="dot" style="width:8px;height:8px;background:var(--or)"></span>Pending: <span id="s-pend" class="stat-n">0</span></div>
+          <div style="margin-left:auto;font-size:12px;color:var(--t2)"><span id="s-pct">0%</span></div>
+        </div>
+        <div class="prog-wrap"><div id="prog-bar" class="prog-bar-inner" style="background:linear-gradient(90deg,var(--bl),var(--pu));width:0%"></div></div>
+      </div></div>
+
+      <!-- Toolbar -->
+      <div id="toolbar" style="display:none;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <button class="fbtn on" data-f="all"   onclick="setQFilter('all')">All</button>
+          <button class="fbtn"    data-f="ok"    onclick="setQFilter('ok')">✓ OK</button>
+          <button class="fbtn"    data-f="error" onclick="setQFilter('error')">✗ Error</button>
+          <div style="width:1px;height:18px;background:var(--b1);margin:0 2px"></div>
+          <button class="fbtn" id="flt-toggle-btn" onclick="toggleFltPanel()">⚙ Filter <span id="flt-badge" style="display:none" class="flt-active-badge">0</span></button>
+          <button class="btn btn-sm" onclick="clearFilters()" id="flt-clear-btn" style="display:none">✕ Clear filters</button>
+          <span style="flex:1"></span>
+          <span id="flt-result-count" style="font-size:11px;color:var(--t2)"></span>
+          <button class="btn btn-sm" onclick="libToggle()" id="lib-toggle-btn">💾 Library <span id="lib-count-badge" style="font-size:10px;color:var(--t2);margin-left:4px"></span></button>
+          <button class="btn btn-sm" onclick="exportCsv()">⬇ Export CSV</button>
+          <button class="btn btn-sm" onclick="clearAll()">Clear</button>
+        </div>
+        <div class="flt-panel" id="flt-panel">
+          <div class="flt-grid">
+            <div class="flt-group" style="grid-column:1/-1">
+              <span class="flt-label">🔍 Search (IP, Proxy, Country, City, ISP, Hostname)</span>
+              <input class="flt-input" id="flt-search" placeholder="Search anything..." oninput="applyFilters()">
+            </div>
+            <div class="flt-group"><span class="flt-label">Country</span>
+              <select class="flt-input" id="flt-country" onchange="applyFilters()"><option value="">All countries</option></select>
+            </div>
+            <div class="flt-group"><span class="flt-label">ISP contains</span>
+              <input class="flt-input" id="flt-isp" placeholder="e.g. Verizon" oninput="applyFilters()">
+            </div>
+            <div class="flt-group"><span class="flt-label">Usage Type</span>
+              <select class="flt-input" id="flt-usage" onchange="applyFilters()">
+                <option value="">All</option><option value="residential">Residential</option>
+                <option value="cellular">Cellular / Mobile</option><option value="corporate">Corporate / Business</option>
+                <option value="datacenter">Data Center</option><option value="educational">Educational</option>
+              </select>
+            </div>
+            <div class="flt-group"><span class="flt-label">OS</span>
+              <select class="flt-input" id="flt-os" onchange="applyFilters()">
+                <option value="">All OS</option><option value="windows">Windows</option>
+                <option value="linux">Linux</option><option value="android">Android</option><option value="ios">iOS / macOS</option>
+              </select>
+            </div>
+            <div class="flt-group"><span class="flt-label">Link Type</span>
+              <input class="flt-input" id="flt-link" placeholder="e.g. OpenVPN, IPIP" oninput="applyFilters()">
+            </div>
+            <div class="flt-group"><span class="flt-label">Fraud Score (max)</span>
+              <input class="flt-input" id="flt-score-max" type="number" placeholder="0–100" min="0" max="100" oninput="applyFilters()">
+            </div>
+            <div class="flt-group"><span class="flt-label">Latency max (ms)</span>
+              <input class="flt-input" id="flt-lat-max" type="number" placeholder="e.g. 3000" min="0" oninput="applyFilters()">
+            </div>
+            <div class="flt-group"><span class="flt-label">Risk Level</span>
+              <select class="flt-input" id="flt-risk" onchange="applyFilters()">
+                <option value="">All</option><option value="low">Low</option>
+                <option value="medium">Medium</option><option value="high">High</option><option value="very high">Very High</option>
+              </select>
+            </div>
+          </div>
+          <div class="flt-row2" style="margin-top:10px">
+            <span class="flt-label" style="margin-right:4px">Proxy type:</span>
+            <label class="flt-chip"><input type="checkbox" id="flt-vpn" onchange="applyFilters()"> VPN</label>
+            <label class="flt-chip"><input type="checkbox" id="flt-dc" onchange="applyFilters()"> Datacenter</label>
+            <label class="flt-chip"><input type="checkbox" id="flt-tor" onchange="applyFilters()"> Tor</label>
+            <label class="flt-chip"><input type="checkbox" id="flt-proxy" onchange="applyFilters()"> Proxy flagged</label>
+            <label class="flt-chip"><input type="checkbox" id="flt-blacklisted" onchange="applyFilters()"> Blacklisted</label>
+            <label class="flt-chip"><input type="checkbox" id="flt-h2" onchange="applyFilters()"> HTTP/2</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Library panel -->
+      <div id="lib-panel" class="lib-panel" style="display:none">
+        <div class="lib-header">
+          <span class="lib-title">💾 Saved Proxy Library</span>
+          <span id="lib-total-badge" style="font-size:10px;color:var(--t2);font-weight:400;margin-right:auto"></span>
+          <button class="btn btn-sm" onclick="libLoad()" title="Load saved proxies into input">↙ Load into input</button>
+          <button class="btn btn-sm" onclick="libExport()" title="Export as .txt">↑ Export .txt</button>
+          <button class="btn btn-sm btn-danger" onclick="libClearAll()" title="Delete all saved proxies">🗑 Clear all</button>
+        </div>
+        <div class="lib-list" id="lib-list">
+          <div class="lib-empty" id="lib-empty">No saved proxies yet. Run a check to auto-save OK proxies.</div>
+        </div>
+      </div>
+
+      <!-- Results table -->
+      <div class="tbl-wrap">
+        <div class="empty" id="empty"><div style="font-size:44px;margin-bottom:10px">🔍</div><div>Enter proxy list above and click <strong>Check Proxies</strong></div></div>
+        <table id="tbl" style="display:none">
+          <thead><tr>
+            <th style="width:34px">#</th>
+            <th style="min-width:160px">Proxy</th>
+            <th style="width:75px">Status</th>
+            <th style="width:72px">Latency</th>
+            <th style="min-width:120px">IP Address</th>
+            <th style="min-width:100px">Country</th>
+            <th>City</th>
+            <th style="max-width:150px">ISP</th>
+            <th style="width:80px">Usage</th>
+            <th style="width:85px">OS</th>
+            <th style="width:50px">MTU</th>
+            <th style="max-width:120px">Link Type</th>
+            <th style="width:155px">JA4T</th>
+            <th style="width:75px">Risk</th>
+            <th style="width:36px"></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Setup Guide ── -->
+    <div class="section" id="sec-guide"><div style="color:var(--t3);font-size:13px;padding:20px">Loading guide...</div></div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- Modal: Confirm delete -->
+<div class="confirm-modal-wrap" id="confirm-modal-wrap">
+  <div class="confirm-modal">
+    <div class="confirm-body">
+      <div class="confirm-icon" id="confirm-icon">&#128465;</div>
+      <h3 class="confirm-title" id="confirm-title">Are you sure?</h3>
+      <p class="confirm-msg" id="confirm-msg">This action cannot be undone.</p>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn btn-sm btn-outline" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-sm confirm-ok" style="background:var(--rd);color:#fff;border-color:var(--rd)" onclick="doConfirm()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Proxy -->
+<div class="overlay" id="add-proxy-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>&#43; Add Proxy → Build VPN</h3><button class="close-btn" onclick="closeAddProxy()">&#215;</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info">&#128161; After adding, we will automatically create a VPN tunnel and give you a ready-to-use <strong>.ovpn</strong> config file.</div>
+      <div class="fg">
+        <label>Proxy URL</label>
+        <input type="text" id="proxy-url-input" placeholder="http://user:pass@1.2.3.4:8080  or  socks5://host:port">
+        <p class="hint">Supported: <code>http://</code>, <code>https://</code>, <code>socks5://</code>, <code>socks4://</code> — with or without authentication.</p>
+      </div>
+      <div id="add-proxy-result" style="display:none">
+        <div class="alert alert-ok" id="add-proxy-ok-msg"></div>
+        <div class="key-box" id="add-ovpn-preview"></div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn btn-primary btn-sm" onclick="downloadAddOvpn()">&#11015; Download .ovpn</button>
+          <button class="btn btn-sm" onclick="copyAddOvpn()">&#128203; Copy config</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" onclick="closeAddProxy()">Cancel</button>
+      <button class="btn btn-primary" id="add-proxy-btn" onclick="submitAddProxy()">&#9889; Create VPN Tunnel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: New client on existing gateway -->
+<div class="overlay" id="new-client-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="new-client-title">Add Device</h3><button class="close-btn" onclick="closeNewClient()">&#215;</button></div>
+    <div class="modal-body">
+      <p class="text-sm text-dim" style="margin-bottom:14px">Generate a separate .ovpn config for another device (phone, tablet, laptop) using the same proxy tunnel.</p>
+      <div class="fg">
+        <label>Device Name</label>
+        <input type="text" id="new-client-name" placeholder="e.g. iphone, work-laptop" maxlength="24" oninput="this.value=this.value.replace(/[^a-zA-Z0-9_-]/g,'')">
+      </div>
+      <div id="new-client-result" style="display:none">
+        <div class="key-box" id="new-client-preview"></div>
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn btn-primary btn-sm" onclick="downloadNewClient()">&#11015; Download .ovpn</button>
+          <button class="btn btn-sm" onclick="copyNewClient()">&#128203; Copy</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" onclick="closeNewClient()">Close</button>
+      <button class="btn btn-primary" id="new-client-btn" onclick="submitNewClient()">&#9889; Generate Config</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Re-download .ovpn -->
+<div class="overlay" id="redown-modal">
+  <div class="modal">
+    <div class="modal-head"><h3 id="redown-title">Download Config</h3><button class="close-btn" onclick="closeRedown()">&#215;</button></div>
+    <div class="modal-body">
+      <div class="key-box" id="redown-preview"></div>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="doRedown()">&#11015; Download .ovpn</button>
+        <button class="btn btn-sm" onclick="copyRedown()">&#128203; Copy</button>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="closeRedown()">Close</button></div>
+  </div>
+</div>
+
+<!-- Modal: OpenVPN per-tunnel manager -->
+<div class="overlay" id="ovpn-modal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head"><h3>&#128274; OpenVPN &mdash; <span id="ovpn-modal-gw" style="color:var(--pu)"></span></h3><button class="close-btn" onclick="closeOvpnModal()">&#215;</button></div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Create New Client</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
+        <div style="flex:1"><input type="text" id="ovm-name" placeholder="device name (phone, router1, laptop)" maxlength="32" oninput="this.value=this.value.replace(/[^a-zA-Z0-9_-]/g,'')"></div>
+        <button class="btn btn-primary btn-sm" id="ovm-gen-btn" onclick="ovmCreate()">Generate .ovpn</button>
+      </div>
+      <div id="ovm-result" style="display:none">
+        <div class="key-box" id="ovm-conf" style="max-height:160px;overflow:auto"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px">
+          <button class="btn btn-primary btn-sm" onclick="ovmDownload()">&#11015; Download .ovpn</button>
+          <button class="btn btn-sm" onclick="ovmCopy()">&#128203; Copy config</button>
+        </div>
+      </div>
+      <div style="height:1px;background:var(--b1);margin:14px 0"></div>
+      <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;display:flex;align-items:center;gap:8px">Existing Clients <button class="btn btn-xs" onclick="ovmLoadClients()">&#8635; Refresh</button></div>
+      <div id="ovm-clients"><div class="text-xs text-dim">Loading&#8230;</div></div>
+      <div style="height:1px;background:var(--b1);margin:14px 0"></div>
+      <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">How to Connect</div>
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-size:12px;line-height:1.8">
+        <strong>All platforms:</strong> Install <span style="color:var(--bl2)">OpenVPN Connect</span> (free) from openvpn.net/client, then import the .ovpn file.<br>
+        <strong>iOS / Android:</strong> OpenVPN Connect &rarr; <strong>+</strong> &rarr; Import from file<br>
+        <strong>Windows / macOS:</strong> OpenVPN Connect &rarr; Import Profile &rarr; Browse<br>
+        <strong>Linux:</strong> <code style="background:rgba(61,126,248,.1);color:var(--bl2);padding:1px 5px;border-radius:3px">sudo openvpn --config yourfile.ovpn</code>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="closeOvpnModal()">Close</button></div>
+  </div>
+</div>
+
+<!-- Modal: L2TP per-tunnel manager -->
+<div class="overlay" id="l2tp-modal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head"><h3>&#128225; L2TP/IPSec &mdash; <span id="l2tp-modal-gw" style="color:var(--pu)"></span></h3><button class="close-btn" onclick="closeL2tpModal()">&#215;</button></div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div id="l2m-loading" class="text-dim text-sm" style="padding:20px;text-align:center">Loading credentials&#8230;</div>
+      <div id="l2m-body" style="display:none">
+        <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Server Info</div>
+        <div class="inforow" style="margin-bottom:14px">
+          <div class="infobox"><div class="lbl">Server IP</div><div class="val text-blue" id="l2m-server"></div></div>
+          <div class="infobox"><div class="lbl">PSK</div><div style="display:flex;align-items:center;gap:6px"><div class="val" id="l2m-psk" style="color:var(--or);flex:1;font-family:monospace;font-size:12px"></div><button class="btn btn-xs" onclick="l2mCopyPsk()">&#128203;</button></div></div>
+        </div>
+        <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;display:flex;align-items:center;gap:8px">Credentials <button class="btn btn-xs btn-green" onclick="l2mAddUser()">&#43; Add User</button></div>
+        <div id="l2m-users"></div>
+        <div style="height:1px;background:var(--b1);margin:14px 0"></div>
+        <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Connection Guide</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap" id="l2m-tabs">
+          <button class="btn btn-xs" data-l2tab="ios" onclick="l2mTab('ios')">iOS</button>
+          <button class="btn btn-xs" data-l2tab="android" onclick="l2mTab('android')">Android</button>
+          <button class="btn btn-xs" data-l2tab="windows" onclick="l2mTab('windows')">Windows</button>
+          <button class="btn btn-xs" data-l2tab="macos" onclick="l2mTab('macos')">macOS</button>
+        </div>
+        <div id="l2m-guide" style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-size:12px;line-height:1.8"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="closeL2tpModal()">Close</button></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script>
+const _key = localStorage.getItem('_customer_key');
+if (!_key) location.replace('/portal');
+
+let _me = null, _results = [], _filter = 'all', _es = null;
+let _addOvpnContent = '', _addOvpnName = '';
+let _newClientGw = '', _newClientContent = '', _newClientFileName = '';
+let _redownContent = '', _redownFileName = '';
+let _keyVisible = false;
+
+async function fetchC(url, opts={}) {
+  opts.headers = {...(opts.headers||{}), 'x-api-key': _key, 'Content-Type': 'application/json'};
+  let r; try { r = await fetch(url, opts); } catch(e) { throw new Error('Network error: '+e.message); }
+  if (r.status===401) { logout(); throw new Error('Session expired'); }
+  const txt=await r.text(); let d; try { d=txt?JSON.parse(txt):{};} catch(_){ d={raw:txt};}
+  if (!r.ok) throw new Error(d.error||d.raw||r.statusText);
+  return d;
+}
+function logout(){ localStorage.removeItem('_customer_key'); location.replace('/portal'); }
+function toast(msg, type){
+  const w=document.getElementById('toasts'); const el=document.createElement('div');
+  el.className='toast '+(type==='err'?'err':'ok'); el.textContent=msg; w.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  setTimeout(()=>{el.classList.remove('show');setTimeout(()=>el.remove(),300);},4000);
+}
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function init(){
+  try { const d=await fetch('/api/admin/settings').then(r=>r.json()); if(d.brand_name) document.querySelectorAll('.sb-name,[id=brand]').forEach(el=>el.textContent=d.brand_name); } catch(_){}
+  try {
+    _me = await fetchC('/api/key/me');
+    document.getElementById('topbar-user').textContent = _me.name || '';
+    document.getElementById('key-display').value = _key;
+    const expires = _me.expires_at ? new Date(_me.expires_at) : null;
+    const expired = expires && expires<new Date();
+    const b = document.getElementById('topbar-badge'); b.style.display='';
+    b.textContent = expired ? 'Expired' : 'Active';
+    b.className = 'badge '+(expired?'br':'bg');
+    renderDash(); applyPerms();
+  } catch(e){ toast('Failed to load: '+e.message,'err'); }
+}
+
+function applyPerms(){
+  if (!_me) return;
+  const p = _me.permissions||[];
+  // All sections visible to any valid key — admin can restrict via allowed_gateways only
+  show('nav-proxies'); show('sep-vpn');
+  show('nav-l2tp');
+  show('nav-checker'); show('sep-tools');
+  show('nav-guide');
+}
+function show(id){ const e=document.getElementById(id); if(e){ e.classList.remove('hidden'); e.style.display=''; } }
+
+function renderDash(){
+  const p=_me.permissions||[];
+  const myGws=_me.my_gateways||[];
+  const myClients=_me.vpn_clients||[];
+  const expires=_me.expires_at?new Date(_me.expires_at):null;
+  document.getElementById('dash-stats').innerHTML = `
+    <div class="stat-card"><div class="v text-purple">${myGws.length}</div><div class="l">My VPN Tunnels</div></div>
+    <div class="stat-card"><div class="v text-blue">${myClients.length}</div><div class="l">VPN Configs</div></div>
+    <div class="stat-card"><div class="v" style="color:${expires&&expires<new Date()?'var(--rd)':'var(--gr)'}">${expires?expires.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'No Limit'}</div><div class="l">Expires</div></div>`;
+  const pLabels={check_proxy:'Proxy Checker',view_gateways:'View Gateways',vpn_clients:'OpenVPN Configs',l2tp_credentials:'L2TP/IPSec',create_gateway:'Create VPN Tunnel'};
+  const perms = p.map(x=>`<span class="badge bp" style="margin:2px">${esc(pLabels[x]||x)}</span>`).join('');
+  document.getElementById('dash-perms').innerHTML = perms||'<span class="badge bd">No permissions</span>';
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────────
+const TITLES={home:'Dashboard',proxies:'My Proxies → VPN',l2tp:'L2TP / IPSec',checker:'Proxy Checker',guide:'Setup Guide'};
+function showSection(id){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-a').forEach(a=>a.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  const nav=document.getElementById('nav-'+id); if(nav) nav.classList.add('active');
+  document.getElementById('topbar-title').textContent=TITLES[id]||id;
+  if(id==='proxies') loadProxies();
+  if(id==='l2tp') loadL2tp();
+  if(id==='guide') renderGuide();
+  if(id==='checker'){ _ck_init_once(); libRefresh(); }
+}
+function toggleKey(){ _keyVisible=!_keyVisible; document.getElementById('key-display').type=_keyVisible?'text':'password'; }
+function copyKey(){ navigator.clipboard.writeText(_key).then(()=>toast('Copied!')); }
+
+// ── My Proxies → VPN ──────────────────────────────────────────────────────────
+async function loadProxies(){
+  const cont = document.getElementById('proxies-content');
+  cont.innerHTML = skelProxies();
+  try {
+    const [pd, cd] = await Promise.all([
+      fetchC('/api/customer/proxies').catch(()=>({gateways:[]})),
+      fetchC('/api/customer/vpn/clients').catch(()=>({clients:[]}))
+    ]);
+    const gws = pd.gateways||[];
+    const clients = cd.clients||[];
+    let html = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <h2 style="font-size:15px;font-weight:700">VPN Tunnels (${gws.length})</h2>
+      <button class="btn btn-primary" onclick="openAddProxy()">&#43; Add Proxy</button>
+    </div>`;
+    if(!gws.length){
+      html += `<div class="card"><div class="card-body">
+        <div class="empty">
+          <div style="font-size:36px;margin-bottom:10px">&#127760;</div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:6px">No VPN tunnels yet</div>
+          <p class="text-dim text-sm" style="max-width:360px;margin:0 auto 16px">Add your first proxy to create a VPN tunnel. Any device can then connect using the generated .ovpn config.</p>
+          <button class="btn btn-primary" onclick="openAddProxy()">&#43; Add My First Proxy</button>
+        </div>
+      </div></div>`;
+    } else {
+      html += gws.map(g => {
+        const gwClients = clients.filter(c=>c.gateway===g.name);
+        const rows = gwClients.length ? gwClients.map(c=>`
+          <tr>
+            <td><span class="mono">${esc(c.client_name)}</span></td>
+            <td class="text-xs text-dim">${new Date(c.created_at).toLocaleDateString()}</td>
+            <td><div class="btn-row">
+              <button class="btn btn-xs btn-green" onclick="redown('${esc(g.name)}','${esc(c.cert_name)}','${esc(c.client_name)}')">&#11015; .ovpn</button>
+              <button class="btn btn-xs btn-danger" onclick="revokeClient('${esc(c.cert_name)}','${esc(c.client_name)}')">&#10005;</button>
+            </div></td>
+          </tr>`).join('') : `<tr><td colspan="3" style="text-align:center;padding:14px;color:var(--t3);font-size:12px">No configs yet. Add a device to get started.</td></tr>`;
+        const running = g.vpn_running && g.tun_running;
+        const partial = g.vpn_running !== g.tun_running;
+        const statusBadge = running
+          ? '<span class="badge bg" style="font-size:10px"><span class="dot"></span>Running</span>'
+          : partial
+            ? '<span class="badge bo" style="font-size:10px"><span class="dot"></span>Partial</span>'
+            : '<span class="badge br" style="font-size:10px"><span class="dot"></span>Stopped</span>';
+        const mitmBadge = g.mitm_running
+          ? '<span class="badge bg" style="font-size:10px">MITM ON</span>'
+          : '<span class="badge bd" style="font-size:10px">MITM OFF</span>';
+        return `<div class="pvpn-card">
+          <div class="pvpn-head">
+            <div class="pvpn-head-info">
+              <div class="pvpn-name">&#127760; ${esc(g.name)} <span style="margin-left:6px">${statusBadge}</span> <span style="margin-left:4px">${mitmBadge}</span></div>
+              <div class="pvpn-proxy" title="${esc(g.proxy_display||'')}">&#128279; ${esc(g.proxy_display||'(no proxy info)')}</div>
+            </div>
+            <div class="btn-row" style="flex-wrap:wrap;justify-content:flex-end;gap:5px">
+              <button class="btn btn-xs btn-primary" onclick="openOvpnModal('${esc(g.name)}')">&#128274; OpenVPN</button>
+              <button class="btn btn-xs btn-purple" onclick="openL2tpModal('${esc(g.name)}')">&#128225; L2TP</button>
+              ${g.mitm_running
+                ? `<button class="btn btn-xs btn-warn" onclick="cToggleMitm('${esc(g.name)}',true)">Stop MITM</button>`
+                : `<button class="btn btn-xs" onclick="cToggleMitm('${esc(g.name)}',false)">MITM</button>`}
+              <button class="btn btn-xs ${running?'btn-warn':'btn-green'}" onclick="cToggleGw('${esc(g.name)}',${running})">${running?'&#9632; Stop':'&#9654; Start'}</button>
+              <button class="btn btn-xs" onclick="cRestartGw('${esc(g.name)}')">&#8635;</button>
+              <a href="/g?name=${encodeURIComponent(g.name)}&api_key=${encodeURIComponent(_key)}" target="_blank" class="btn btn-xs" style="background:rgba(61,126,248,.12);border-color:rgba(61,126,248,.25);color:var(--bl2)">&#127760; Manage</a>
+              <button class="btn btn-xs btn-danger" onclick="deleteGateway('${esc(g.name)}')">&#128465;</button>
+            </div>
+          </div>
+          <div class="pvpn-body">
+            <div class="inforow" style="margin-bottom:12px">
+              <div class="infobox"><div class="lbl">Exit IP</div><div class="val text-blue" style="display:flex;align-items:center;gap:6px"><span id="exit-ip-${esc(g.name)}">${esc(g.exit_ip||'Pending')}</span> <button class="btn btn-xs" style="padding:2px 6px;font-size:10px" title="Re-test exit IP" onclick="checkTunnelIp('${esc(g.name)}')">&#8635;</button></div></div>
+              <div class="infobox"><div class="lbl">Protocol</div><div class="val">OpenVPN UDP</div></div>
+              <div class="infobox"><div class="lbl">Port</div><div class="val">${g.vpn_port||'—'}</div></div>
+              <div class="infobox"><div class="lbl">Country</div><div class="val">${esc(g.country||'—')}</div></div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em">VPN Configs / Devices (${gwClients.length})</span>
+              <button class="btn btn-xs" onclick="openNewClient('${esc(g.name)}')">&#43; Add Device</button>
+            </div>
+            <div class="clients-table-wrap" style="overflow-x:auto">
+              <table><thead><tr><th>Device</th><th>Created</th><th>Actions</th></tr></thead>
+              <tbody>${rows}</tbody></table>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    cont.innerHTML = html;
+  } catch(e){ cont.innerHTML=`<div class="empty" style="color:var(--rd)">${esc(e.message)}</div>`; }
+}
+
+// Add proxy modal
+function openAddProxy(){
+  document.getElementById('proxy-url-input').value='';
+  document.getElementById('add-proxy-result').style.display='none';
+  document.getElementById('add-proxy-btn').style.display='';
+  _addOvpnContent=''; _addOvpnName='';
+  document.getElementById('add-proxy-modal').classList.add('open');
+}
+function closeAddProxy(){ document.getElementById('add-proxy-modal').classList.remove('open'); }
+async function submitAddProxy(){
+  const url = document.getElementById('proxy-url-input').value.trim();
+  if(!url){ toast('Enter a proxy URL','err'); return; }
+  const btn=document.getElementById('add-proxy-btn'); btn.disabled=true; btn.textContent='Building tunnel...';
+  try {
+    const d = await fetchC('/api/customer/proxy',{method:'POST',body:JSON.stringify({proxy_url:url})});
+    _addOvpnContent = d.ovpn||''; _addOvpnName = `${d.gateway||'vpn'}-default.ovpn`;
+    const msg = document.getElementById('add-proxy-ok-msg');
+    msg.textContent = `✓ VPN tunnel "${d.gateway}" created! Exit IP: ${d.exit_ip||'(pending)'}`;
+    if(d.ovpn){
+      document.getElementById('add-ovpn-preview').textContent = d.ovpn.slice(0,600)+(d.ovpn.length>600?'\n...(truncated)':'');
+      document.getElementById('add-proxy-result').style.display='block';
+      document.getElementById('add-proxy-btn').style.display='none';
+    }
+    toast('VPN tunnel created!'); loadProxies();
+  } catch(e){ toast(e.message,'err'); } finally { btn.disabled=false; btn.textContent='⚡ Create VPN Tunnel'; }
+}
+function downloadAddOvpn(){ dlFile(_addOvpnContent,_addOvpnName); }
+function copyAddOvpn(){ navigator.clipboard.writeText(_addOvpnContent).then(()=>toast('Copied!')); }
+
+// New client on existing gateway
+function openNewClient(gw){
+  _newClientGw=gw; _newClientContent=''; _newClientFileName='';
+  document.getElementById('new-client-name').value='';
+  document.getElementById('new-client-result').style.display='none';
+  document.getElementById('new-client-btn').style.display='';
+  document.getElementById('new-client-title').textContent='Add Device — '+gw;
+  document.getElementById('new-client-modal').classList.add('open');
+}
+function closeNewClient(){ document.getElementById('new-client-modal').classList.remove('open'); }
+async function submitNewClient(){
+  const name = document.getElementById('new-client-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  if(!name){ toast('Enter a device name','err'); return; }
+  const btn=document.getElementById('new-client-btn'); btn.disabled=true; btn.textContent='Generating...';
+  try {
+    const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(_newClientGw)}/client`,{method:'POST',body:JSON.stringify({client_name:name})});
+    _newClientContent=d.ovpn||''; _newClientFileName=`${_newClientGw}-${name}.ovpn`;
+    document.getElementById('new-client-preview').textContent = d.ovpn.slice(0,600)+(d.ovpn.length>600?'\n...(truncated)':'');
+    document.getElementById('new-client-result').style.display='block';
+    document.getElementById('new-client-btn').style.display='none';
+    toast('Config generated!'); loadProxies();
+  } catch(e){ toast(e.message,'err'); } finally { btn.disabled=false; btn.textContent='⚡ Generate Config'; }
+}
+function downloadNewClient(){ dlFile(_newClientContent,_newClientFileName); }
+function copyNewClient(){ navigator.clipboard.writeText(_newClientContent).then(()=>toast('Copied!')); }
+
+// Re-download
+async function redown(gw,certName,clientName){
+  try {
+    const d = await fetchC(`/api/customer/vpn/client/${encodeURIComponent(certName)}/ovpn`);
+    _redownContent=d.ovpn||''; _redownFileName=`${gw}-${clientName}.ovpn`;
+    document.getElementById('redown-title').textContent='Download — '+clientName;
+    document.getElementById('redown-preview').textContent = d.ovpn.slice(0,600)+(d.ovpn.length>600?'\n...(truncated)':'');
+    document.getElementById('redown-modal').classList.add('open');
+  } catch(e){ toast(e.message,'err'); }
+}
+function closeRedown(){ document.getElementById('redown-modal').classList.remove('open'); }
+function doRedown(){ dlFile(_redownContent,_redownFileName); }
+function copyRedown(){ navigator.clipboard.writeText(_redownContent).then(()=>toast('Copied!')); }
+
+// Revoke client
+async function revokeClient(certName,clientName){
+  showConfirm({
+    icon:'&#10005;',iconBg:'rgba(240,74,74,.12)',iconColor:'#f04a4a',
+    title:`Revoke config for "${clientName}"?`,
+    msg:'This device will no longer be able to connect.',
+    confirmText:'Revoke', confirmClass:'btn-danger',
+    onConfirm: async ()=>{
+      try{
+        await fetchC(`/api/customer/vpn/client/${encodeURIComponent(certName)}`,{method:'DELETE'});
+        toast(`"${clientName}" revoked`); loadProxies();
+      } catch(e){ toast(e.message,'err'); }
+    }
+  });
+}
+
+// Check tunnel exit IP through proxy (admin-style: simple toast + reload)
+async function checkTunnelIp(name){
+  const btn = event && event.target;
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '&#8987;'; }
+  try {
+    const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(name)}/ip`);
+    if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+    const el = document.getElementById(`exit-ip-${name}`);
+    if (el) el.textContent = d.ip;
+    toast('Exit IP: ' + d.ip);
+    loadProxies();
+  } catch(e){
+    if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+    toast(e.message,'err');
+  }
+}
+
+// Delete gateway
+function deleteGateway(name){
+  showConfirm({
+    icon:'&#128465;',iconBg:'rgba(240,74,74,.12)',iconColor:'#f04a4a',
+    title:`Delete tunnel "${name}"?`,
+    msg:'All VPN configs and L2TP credentials for this tunnel will be permanently revoked.',
+    confirmText:'Delete', confirmClass:'btn-danger',
+    onConfirm: async ()=>{
+      try{
+        await fetchC(`/api/customer/proxy/${encodeURIComponent(name)}`,{method:'DELETE'});
+        toast(`Tunnel "${name}" deleted`); loadProxies();
+      } catch(e){ toast(e.message,'err'); }
+    }
+  });
+}
+
+// ── Tunnel control: start/stop/restart/MITM ─────────────────────────────────
+async function cToggleGw(name, running){
+  const action = running ? 'stop' : 'start';
+  try {
+    await fetchC(`/api/customer/gateway/${encodeURIComponent(name)}/${action}`, {method:'POST'});
+    toast(`${running?'Stopped':'Started'} ${name}`);
+    setTimeout(loadProxies, 1500);
+  } catch(e){ toast(e.message,'err'); }
+}
+async function cRestartGw(name){
+  try {
+    await fetchC(`/api/customer/gateway/${encodeURIComponent(name)}/restart`, {method:'POST'});
+    toast(`Restarting ${name}\u2026`);
+    setTimeout(loadProxies, 2000);
+  } catch(e){ toast(e.message,'err'); }
+}
+function cToggleMitm(name, active){
+  const action = active ? 'stop' : 'start';
+  const doIt = async ()=>{
+    try {
+      await fetchC(`/api/customer/gateway/${encodeURIComponent(name)}/mitm/${action}`, {method:'POST'});
+      toast(`MITM ${active?'stopped':'started'} for ${name}`);
+      setTimeout(loadProxies, 1200);
+    } catch(e){ toast(e.message,'err'); }
+  };
+  if (active) return doIt();
+  showConfirm({
+    icon:'&#128737;', iconBg:'rgba(245,158,11,.12)', iconColor:'#f59e0b',
+    title:`Start MITM for "${name}"?`,
+    msg:'All TCP 80/443 traffic from this tunnel will be intercepted and decrypted. Clients must trust the MITM CA cert. Use only on devices you own.',
+    confirmText:'Start MITM', confirmClass:'btn-primary',
+    onConfirm: doIt,
+  });
+}
+
+// ── OpenVPN modal ────────────────────────────────────────────────────────────
+let _ovmGw='', _ovmConf='', _ovmName='';
+function openOvpnModal(name){
+  _ovmGw=name; _ovmConf=''; _ovmName='';
+  document.getElementById('ovpn-modal-gw').textContent = name;
+  document.getElementById('ovm-name').value = '';
+  document.getElementById('ovm-result').style.display='none';
+  document.getElementById('ovpn-modal').classList.add('open');
+  ovmLoadClients();
+}
+function closeOvpnModal(){ document.getElementById('ovpn-modal').classList.remove('open'); }
+async function ovmCreate(){
+  const cn = document.getElementById('ovm-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  if (!cn) return toast('Enter a device name','err');
+  const btn = document.getElementById('ovm-gen-btn'); btn.disabled=true; btn.textContent='Generating\u2026';
+  try {
+    const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(_ovmGw)}/client`, {method:'POST', body:JSON.stringify({client_name:cn})});
+    _ovmConf = d.ovpn||''; _ovmName = cn;
+    document.getElementById('ovm-conf').textContent = _ovmConf;
+    document.getElementById('ovm-result').style.display='block';
+    toast('Client created');
+    ovmLoadClients();
+    loadProxies();
+  } catch(e){ toast(e.message,'err'); }
+  finally { btn.disabled=false; btn.textContent='Generate .ovpn'; }
+}
+function ovmDownload(){
+  if (!_ovmConf) return;
+  const b = new Blob([_ovmConf], {type:'text/plain'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${_ovmGw}_${_ovmName}.ovpn`; a.click();
+}
+function ovmCopy(){ if(!_ovmConf) return; navigator.clipboard.writeText(_ovmConf).then(()=>toast('Copied!')); }
+async function ovmLoadClients(){
+  const el = document.getElementById('ovm-clients');
+  el.innerHTML = '<div class="text-xs text-dim">Loading\u2026</div>';
+  try {
+    const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(_ovmGw)}/clients`);
+    const clients = d.clients||[];
+    if (!clients.length){ el.innerHTML = '<div class="text-xs text-dim" style="padding:6px 0">No clients yet.</div>'; return; }
+    el.innerHTML = clients.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:6px">
+      <div style="flex:1">
+        <div style="font-family:monospace;font-size:12px;font-weight:700;color:var(--gr)">${esc(c.client_name)}</div>
+        <div class="text-xs text-dim" style="font-family:monospace;margin-top:2px">${esc(c.cert_name)}</div>
+      </div>
+      <button class="btn btn-xs btn-green" onclick="ovmRedown('${esc(c.cert_name)}','${esc(c.client_name)}')">&#11015; .ovpn</button>
+      <button class="btn btn-xs btn-danger" onclick="ovmRevoke('${esc(c.cert_name)}','${esc(c.client_name)}')">&#10005;</button>
+    </div>`).join('');
+  } catch(e){ el.innerHTML = `<div class="text-xs" style="color:var(--rd)">${esc(e.message)}</div>`; }
+}
+async function ovmRedown(certName, clientName){
+  try {
+    const d = await fetchC(`/api/customer/vpn/client/${encodeURIComponent(certName)}/ovpn`);
+    _ovmConf = d.ovpn||''; _ovmName = clientName || certName;
+    document.getElementById('ovm-conf').textContent = _ovmConf;
+    document.getElementById('ovm-result').style.display='block';
+  } catch(e){ toast(e.message,'err'); }
+}
+async function ovmRevoke(certName, clientName){
+  showConfirm({
+    icon:'&#10005;', iconBg:'rgba(240,74,74,.12)', iconColor:'#f04a4a',
+    title:`Revoke "${clientName||certName}"?`,
+    msg:'This .ovpn config will no longer connect.',
+    confirmText:'Revoke', confirmClass:'btn-danger',
+    onConfirm: async ()=>{
+      try {
+        await fetchC(`/api/customer/vpn/client/${encodeURIComponent(certName)}`, {method:'DELETE'});
+        toast('Revoked'); ovmLoadClients(); loadProxies();
+      } catch(e){ toast(e.message,'err'); }
+    }
+  });
+}
+
+// ── L2TP modal (per tunnel) ──────────────────────────────────────────────────
+let _l2mGw='', _l2mData=null;
+function openL2tpModal(name){
+  _l2mGw = name; _l2mData = null;
+  document.getElementById('l2tp-modal-gw').textContent = name;
+  document.getElementById('l2m-loading').style.display='block';
+  document.getElementById('l2m-loading').textContent='Loading credentials\u2026';
+  document.getElementById('l2m-body').style.display='none';
+  document.getElementById('l2tp-modal').classList.add('open');
+  l2mLoad();
+}
+function closeL2tpModal(){ document.getElementById('l2tp-modal').classList.remove('open'); }
+async function l2mLoad(){
+  try {
+    let d = await fetchC('/api/customer/l2tp');
+    let users = (d.users||[]).filter(u => u.gateway === _l2mGw);
+    if (!users.length){
+      // Auto-create default
+      await fetchC(`/api/customer/l2tp/gateway/${encodeURIComponent(_l2mGw)}`, {method:'POST', body:JSON.stringify({username:_l2mGw})});
+      d = await fetchC('/api/customer/l2tp');
+      users = (d.users||[]).filter(u => u.gateway === _l2mGw);
+    }
+    _l2mData = { server_ip: d.server_ip, psk: d.psk, users };
+    l2mRender(_l2mData);
+  } catch(e){
+    document.getElementById('l2m-loading').textContent = 'Error: ' + e.message;
+  }
+}
+function l2mRender(d){
+  document.getElementById('l2m-server').textContent = d.server_ip || '?';
+  document.getElementById('l2m-psk').textContent = d.psk || '?';
+  const users = d.users || [];
+  document.getElementById('l2m-users').innerHTML = users.length ? users.map(u=>`
+    <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px 14px;margin-bottom:8px">
+      <div><div class="lbl" style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Username</div><div class="val" style="color:var(--gr);font-family:monospace;font-size:12px;font-weight:700">${esc(u.chap_name||u.username)}</div></div>
+      <div><div class="lbl" style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Password</div><div class="val" style="color:var(--or);font-family:monospace;font-size:12px;font-weight:700">${esc(u.password)}</div></div>
+      <button class="btn btn-xs" title="Copy creds" onclick="l2mCopyUser('${esc(u.username||u.chap_name)}')">&#128203;</button>
+      <button class="btn btn-xs btn-warn" title="Reset password" onclick="l2mReset('${esc(u.username||u.chap_name)}')">&#8634;</button>
+    </div>`).join('') : '<div class="text-xs text-dim">No users.</div>';
+  document.getElementById('l2m-loading').style.display='none';
+  document.getElementById('l2m-body').style.display='block';
+  l2mTab('ios');
+}
+function l2mTab(tab){
+  document.querySelectorAll('#l2m-tabs [data-l2tab]').forEach(b=>{
+    b.classList.toggle('btn-primary', b.dataset.l2tab===tab);
+  });
+  if (!_l2mData) return;
+  const d = _l2mData;
+  const u0 = (d.users && d.users[0]) || {};
+  const srv = esc(d.server_ip||'?'), psk = esc(d.psk||'?');
+  const usr = esc(u0.chap_name || u0.username || '?'), pwd = esc(u0.password||'?');
+  const guides = {
+    ios: `<strong>iOS &mdash; Settings &rarr; VPN &rarr; Add VPN Configuration</strong><br>
+      Type: <code>L2TP</code> &bull; Description: <span style="color:var(--pu)">${esc(_l2mGw)}</span><br>
+      Server: <span style="color:var(--bl2)">${srv}</span> &bull; Account: <span style="color:var(--gr)">${usr}</span><br>
+      Password: <span style="color:var(--or)">${pwd}</span> &bull; Secret: <span style="color:var(--or)">${psk}</span> &bull; Send All Traffic: <code>ON</code>`,
+    android: `<strong>Android &mdash; Settings &rarr; Network &rarr; VPN &rarr; Add VPN</strong><br>
+      Type: <code>L2TP/IPSec PSK</code><br>
+      Server: <span style="color:var(--bl2)">${srv}</span><br>
+      IPSec Pre-shared Key: <span style="color:var(--or)">${psk}</span><br>
+      Username: <span style="color:var(--gr)">${usr}</span> &bull; Password: <span style="color:var(--or)">${pwd}</span>`,
+    windows: `<strong>Windows &mdash; Settings &rarr; VPN &rarr; Add VPN Connection</strong><br>
+      Provider: <code>Windows (built-in)</code> &bull; VPN type: <code>L2TP/IPsec with pre-shared key</code><br>
+      Server: <span style="color:var(--bl2)">${srv}</span><br>
+      Pre-shared key: <span style="color:var(--or)">${psk}</span><br>
+      Username: <span style="color:var(--gr)">${usr}</span> &bull; Password: <span style="color:var(--or)">${pwd}</span>`,
+    macos: `<strong>macOS &mdash; System Settings &rarr; VPN &rarr; Add VPN Connection</strong><br>
+      Interface: <code>L2TP over IPSec</code><br>
+      Server: <span style="color:var(--bl2)">${srv}</span><br>
+      Account: <span style="color:var(--gr)">${usr}</span><br>
+      Password: <span style="color:var(--or)">${pwd}</span> &bull; Shared Secret: <span style="color:var(--or)">${psk}</span>`,
+  };
+  document.getElementById('l2m-guide').innerHTML = guides[tab] || '';
+}
+function l2mCopyPsk(){ if(!_l2mData) return; navigator.clipboard.writeText(_l2mData.psk||'').then(()=>toast('PSK copied!')); }
+function l2mCopyUser(username){
+  if (!_l2mData) return;
+  const u = (_l2mData.users||[]).find(x => (x.username||x.chap_name)===username);
+  if (!u) return;
+  const text = `VPN Type: L2TP/IPSec PSK\nServer: ${_l2mData.server_ip}\nPSK: ${_l2mData.psk}\nUsername: ${u.chap_name||u.username}\nPassword: ${u.password}`;
+  navigator.clipboard.writeText(text).then(()=>toast('Credentials copied!'));
+}
+async function l2mReset(username){
+  showConfirm({
+    icon:'&#8634;', iconBg:'rgba(245,158,11,.12)', iconColor:'#f59e0b',
+    title:`Reset password for "${username}"?`,
+    msg:'A new random password will be generated. The old one stops working immediately.',
+    confirmText:'Reset', confirmClass:'btn-primary',
+    onConfirm: async ()=>{
+      try {
+        await fetchC(`/api/customer/l2tp/gateway/${encodeURIComponent(_l2mGw)}`, {method:'POST', body:JSON.stringify({username})});
+        toast('Password reset'); l2mLoad();
+      } catch(e){ toast(e.message,'err'); }
+    }
+  });
+}
+async function l2mAddUser(){
+  const raw = prompt('New username (alphanumeric, _ or -):');
+  if (!raw) return;
+  const username = raw.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  if (!username) return toast('Invalid username','err');
+  try {
+    await fetchC(`/api/customer/l2tp/gateway/${encodeURIComponent(_l2mGw)}`, {method:'POST', body:JSON.stringify({username})});
+    toast('User added'); l2mLoad();
+  } catch(e){ toast(e.message,'err'); }
+}
+
+// Skeleton helpers
+function skelProxies(){
+  return [1,2].map(()=>`<div class="skel-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div class="skeleton skel-row w60" style="height:16px"></div>
+      <div class="skeleton skel-btn"></div>
+    </div>
+    <div class="skeleton skel-row w100"></div>
+    <div class="skeleton skel-row w40" style="margin-top:4px"></div>
+    <div style="display:flex;gap:6px;margin-top:12px">
+      <div class="skeleton skel-tag"></div><div class="skeleton skel-tag"></div><div class="skeleton skel-tag"></div>
+    </div>
+  </div>`).join('');
+}
+function skelL2tp(){
+  return [1,2].map(()=>`<div class="skel-card">
+    <div class="skeleton skel-row w40" style="height:14px;margin-bottom:12px"></div>
+    <div class="skeleton skel-row w60"></div>
+    <div class="skeleton skel-row w50" style="width:50%"></div>
+    <div class="skeleton skel-row w30"></div>
+  </div>`).join('');
+}
+
+// Confirm modal
+let _confirmCb=null;
+function showConfirm({icon,iconBg,iconColor,title,msg,confirmText,confirmClass,onConfirm}){
+  const el=document.getElementById('confirm-modal-wrap');
+  el.querySelector('.confirm-icon').innerHTML=icon;
+  el.querySelector('.confirm-icon').style.cssText=`background:${iconBg};color:${iconColor}`;
+  el.querySelector('.confirm-title').textContent=title;
+  el.querySelector('.confirm-msg').textContent=msg;
+  const btn=el.querySelector('.confirm-ok');
+  btn.textContent=confirmText||'Confirm';
+  btn.style.cssText = confirmClass==='btn-danger'
+    ? 'background:var(--rd);color:#fff;border-color:var(--rd)'
+    : 'background:var(--bl);color:#fff;border-color:var(--bl)';
+  _confirmCb=onConfirm;
+  el.classList.add('open');
+}
+function closeConfirm(){ document.getElementById('confirm-modal-wrap').classList.remove('open'); _confirmCb=null; }
+function doConfirm(){ const cb=_confirmCb; closeConfirm(); if(cb) cb(); }
+
+// Guide section
+function renderGuide(){
+  document.getElementById('sec-guide').innerHTML=`
+  <div style="max-width:720px">
+    <div style="margin-bottom:24px">
+      <div style="font-size:20px;font-weight:800;margin-bottom:6px">&#128196; Setup Guide</div>
+      <div style="color:var(--t2);font-size:13px">Step-by-step instructions to connect on any device. <a href="/home" target="_blank" style="color:var(--bl2)">View full guide page &#8599;</a></div>
+    </div>
+    ${guideHTML()}
+  </div>`;
+}
+function guideHTML(){
+  const platforms=[{id:'gw',label:'&#128421; Windows',content:windowsGuide()},{id:'gm',label:'&#63743; macOS',content:macGuide()},{id:'gi',label:'&#128241; iOS',content:iosGuide()},{id:'ga',label:'&#129337; Android',content:androidGuide()},{id:'gl',label:'&#128737; L2TP (all OS)',content:l2tpGuide()}];
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px" id="gtabs">`+platforms.map((p,i)=>`<button class="btn btn-sm ${i===0?'btn-primary':'btn-outline'}" onclick="switchGuide('${p.id}',this)">${p.label}</button>`).join('')+`</div>`+platforms.map((p,i)=>`<div id="g-${p.id}" style="display:${i===0?'block':'none'}">${p.content}</div>`).join('');
+}
+function switchGuide(id,btn){
+  document.querySelectorAll('#sec-guide .btn').forEach(b=>{b.className='btn btn-sm btn-outline';});
+  btn.className='btn btn-sm btn-primary';
+  ['gw','gm','gi','ga','gl'].forEach(k=>{ const e=document.getElementById('g-'+k); if(e) e.style.display=k===id?'block':'none'; });
+}
+function guideStep(n,title,body){ return `<div style="display:flex;gap:12px;margin-bottom:14px;padding:14px;background:var(--s1);border:1px solid var(--b1);border-radius:10px"><div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--bl),var(--pu));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0">${n}</div><div><div style="font-size:13px;font-weight:700;margin-bottom:4px">${title}</div><div style="font-size:12px;color:var(--t2);line-height:1.7">${body}</div></div></div>`; }
+function codeInline(s){ return `<code style="background:var(--s3);border:1px solid var(--b2);padding:1px 6px;border-radius:4px;font-family:monospace;font-size:12px;color:var(--bl2)">${s}</code>`; }
+function windowsGuide(){ return guideStep(1,'Download OpenVPN GUI','Visit <a href="https://openvpn.net/community-downloads/" target="_blank" style="color:var(--bl2)">openvpn.net</a> and install the Windows client (free).')+guideStep(2,'Add a proxy tunnel','In this portal: <b>My Proxies → VPN</b> → click <b>+ Add Proxy</b>, paste your proxy URL, click Create.')+guideStep(3,'Download .ovpn config','After tunnel is created, click the download icon on the VPN config you want. A '+codeInline('.ovpn')+' file is saved.')+guideStep(4,'Import & Connect','Right-click the OpenVPN tray icon → <b>Import file</b> → select the .ovpn → then click <b>Connect</b>.'); }
+function macGuide(){ return guideStep(1,'Install Tunnelblick','Download <a href="https://tunnelblick.net" target="_blank" style="color:var(--bl2)">Tunnelblick</a> (free OpenVPN client for macOS).')+guideStep(2,'Create tunnel & download config','Portal → <b>My Proxies → VPN</b> → Add Proxy → Download '+codeInline('.ovpn')+'.')+guideStep(3,'Install config','Double-click the .ovpn file — Tunnelblick imports it automatically.')+guideStep(4,'Connect','Click Tunnelblick in the menu bar → select your VPN → Connect.'); }
+function iosGuide(){ return guideStep(1,'Install OpenVPN Connect','Get <b>OpenVPN Connect</b> from the App Store (free).')+guideStep(2,'Download config to iPhone','Open portal in Safari → download .ovpn → when prompted choose <b>Share → OpenVPN</b>.')+guideStep(3,'Add profile','In OpenVPN Connect tap <b>+</b> → <b>Import from Files</b> → select .ovpn → tap Add.')+guideStep(4,'Connect','Toggle the connection. Allow VPN config when iOS asks.'); }
+function androidGuide(){ return guideStep(1,'Install OpenVPN for Android','Install <b>OpenVPN for Android</b> from Google Play (free).')+guideStep(2,'Download config','Portal → download .ovpn → saved to Downloads folder.')+guideStep(3,'Import','Open app → tap <b>Import</b> → browse Downloads → select .ovpn.')+guideStep(4,'Connect','Tap connect. Allow VPN when Android prompts.'); }
+function l2tpGuide(){ return `<div style="padding:12px 14px;background:rgba(155,116,245,.07);border:1px solid rgba(155,116,245,.2);border-radius:8px;font-size:12px;color:var(--t2);margin-bottom:16px">&#9432; First, get your L2TP credentials: <b>L2TP / IPSec</b> tab → select a tunnel → copy Server IP, PSK, username & password.</div>`+guideStep('W','Windows','Settings → Network → VPN → <b>Add VPN</b> → Provider: Windows built-in → Type: <b>L2TP/IPsec with pre-shared key</b> → enter Server, PSK, Username, Password.')+guideStep('&#63743;','iPhone / iPad / macOS','Settings → General → VPN → <b>Add VPN Configuration</b> → Type: <b>L2TP</b> → Server, Account, Password, Secret (PSK).')+guideStep('A','Android','Settings → Network → VPN → <b>+</b> → Type: <b>L2TP/IPSec PSK</b> → Server, pre-shared key, Username, Password.'); }
+
+// Close modals on backdrop click
+['add-proxy-modal','new-client-modal','redown-modal','ovpn-modal','l2tp-modal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',e=>{ if(e.target===document.getElementById(id)) document.getElementById(id).classList.remove('open'); });
+});
+
+function dlFile(content, filename){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type:'application/x-openvpn-profile'}));
+  a.download=filename; document.body.appendChild(a); a.click(); a.remove(); toast('Downloaded!');
+}
+
+// ── L2TP ──────────────────────────────────────────────────────────────────────
+let _l2tpData = null;
+async function loadL2tp(){
+  const infoEl=document.getElementById('l2tp-info');
+  const contEl=document.getElementById('l2tp-content');
+  contEl.innerHTML = skelL2tp();
+  try {
+    const [l2tp, proxyData] = await Promise.all([
+      fetchC('/api/customer/l2tp'),
+      fetchC('/api/customer/proxies').catch(()=>({gateways:[]}))
+    ]);
+    _l2tpData=l2tp;
+    // Only show own proxy tunnels — L2TP routes through the customer's own proxy
+    const gws = proxyData.gateways||[];
+    const seen = new Set();
+    const allGws = gws.filter(g=>{ if(seen.has(g.name)) return false; seen.add(g.name); return true; });
+    infoEl.innerHTML=`<div class="card" style="margin-bottom:14px"><div class="card-body">
+      <div class="inforow">
+        <div class="infobox"><div class="lbl">Server IP</div><div class="val text-blue">${esc(l2tp.server_ip)}</div></div>
+        <div class="infobox"><div class="lbl">Pre-Shared Key</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="val text-orange">${esc(l2tp.psk)}</div>
+            <button class="btn btn-xs" onclick="navigator.clipboard.writeText('${esc(l2tp.psk)}').then(()=>toast('PSK copied!'))">&#128203;</button>
+          </div>
+        </div>
+      </div>
+      <div class="setup-box">
+        <strong>VPN Type:</strong> L2TP/IPSec with Pre-Shared Key &nbsp;|&nbsp;
+        iOS: Settings &rarr; VPN &rarr; Add &rarr; L2TP &nbsp;|&nbsp;
+        Windows: Network &rarr; Add VPN &rarr; L2TP/IPSec PSK &nbsp;|&nbsp;
+        Android: VPN &rarr; L2TP/IPSec PSK
+      </div>
+    </div></div>`;
+    const users = l2tp.users||[];
+    if(!users.length){
+      const gwBtns = allGws.map(g=>`<button class="btn btn-sm btn-primary" onclick="createL2tp('${esc(g.name)}')">+ ${esc(g.name)}</button>`).join('');
+      contEl.innerHTML=`<div class="card"><div class="card-body">
+        <p class="text-dim text-sm" style="margin-bottom:12px">No L2TP credentials yet. Select one of your proxy tunnels to activate L2TP:</p>
+        <div class="btn-row">${gwBtns||'<span class="text-dim text-sm">No proxy tunnels found. Go to <strong>My Proxies → VPN</strong> and add a proxy first.</span>'}</div>
+      </div></div>`;
+      return;
+    }
+    const existing = users.map(u=>u.gateway);
+    const missing = allGws.filter(g=>!existing.includes(g.name));
+    contEl.innerHTML = users.map(u=>`
+      <div class="cred-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+          <h4>&#127760; ${esc(u.gateway)}</h4>
+          <button class="btn btn-xs" onclick="copyL2tp('${esc(u.gateway)}','${esc(u.chap_name||u.username)}','${esc(u.password)}')">&#128203; Copy All</button>
+        </div>
+        <div class="cred-fields">
+          <div class="cred-field"><div class="lbl">Server IP</div><div class="val text-blue">${esc(l2tp.server_ip)}</div></div>
+          <div class="cred-field"><div class="lbl">PSK</div><div class="val text-orange">${esc(l2tp.psk)}</div></div>
+          <div class="cred-field"><div class="lbl">Username</div><div class="val">${esc(u.chap_name||u.username)}</div></div>
+          <div class="cred-field"><div class="lbl">Password</div><div class="val">${esc(u.password)}</div></div>
+        </div>
+      </div>`).join('') +
+      (missing.length ? `<div class="card"><div class="card-body"><p class="text-xs text-dim" style="margin-bottom:10px">Activate L2TP for more of your tunnels:</p><div class="btn-row">${missing.map(g=>`<button class="btn btn-sm" onclick="createL2tp('${esc(g.name)}')">+ ${esc(g.name)}</button>`).join('')}</div></div></div>` : '');
+  } catch(e){ contEl.innerHTML=`<div class="empty" style="color:var(--rd)">${esc(e.message)}</div>`; }
+}
+async function createL2tp(gw){
+  try {
+    const d=await fetchC(`/api/customer/l2tp/gateway/${encodeURIComponent(gw)}`,{method:'POST'});
+    toast(d.created?'L2TP credentials created for '+gw:'Already exists for '+gw); loadL2tp();
+  } catch(e){ toast(e.message,'err'); }
+}
+function copyL2tp(gw,user,pass){
+  if(!_l2tpData) return;
+  navigator.clipboard.writeText(`Server: ${_l2tpData.server_ip}\nPSK: ${_l2tpData.psk}\nUsername: ${user}\nPassword: ${pass}`).then(()=>toast('Copied!'));
+}
+
+// ── Proxy Checker (admin-equivalent) ─────────────────────────────────────────
+let _qfilter = 'all';
+
+function _ck_init_once(){
+  const ta = document.getElementById('proxy-input');
+  if (!ta || ta._ck_init) return;
+  ta._ck_init = true;
+  ta.addEventListener('input', () => {
+    const n = ta.value.split('\n').filter(l => l.trim()).length;
+    document.getElementById('proxy-count').textContent = n + ' proxies';
+  });
+}
+
+function _flag(iso){
+  if(!iso||iso.length!==2)return'';
+  const b=0x1F1E6-65;
+  try{return String.fromCodePoint(b+iso.toUpperCase().charCodeAt(0),b+iso.toUpperCase().charCodeAt(1))+' ';}catch{return'';}
+}
+function _osBadge(os){
+  if(!os) return '<span class="os os-oth">—</span>';
+  const l = os.toLowerCase();
+  if(l.includes('windows')) return `<span class="os os-win">${esc(os)}</span>`;
+  if(l.includes('linux'))   return `<span class="os os-lin">${esc(os)}</span>`;
+  if(l.includes('android')) return `<span class="os os-and">${esc(os)}</span>`;
+  return `<span class="os os-oth">${esc(os)}</span>`;
+}
+function _latCls(ms){if(!ms)return'';return ms<1500?'lat-f':ms<4000?'lat-m':'lat-s';}
+function _latFmt(ms){if(!ms)return'—';return ms>=1000?(ms/1000).toFixed(1)+'s':ms+'ms';}
+function _v(x){return esc(x)||'<span style="color:var(--t2)">—</span>';}
+function _riskBadge(r){
+  if(r.sc_is_vpn) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(61,126,248,.15);color:var(--bl2);font-weight:600">VPN</span>';
+  if(r.sc_is_tor) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(139,148,158,.15);color:var(--t2);font-weight:600">Tor</span>';
+  if(r.sc_is_dc)  return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--or);font-weight:600">DC</span>';
+  const u=(r.usage||'').toLowerCase();
+  if(u.includes('cellular')||u.includes('mobile')) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(22,200,122,.1);color:var(--gr);font-weight:600">Cellular</span>';
+  if(u.includes('residential')) return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(22,200,122,.12);color:var(--gr);font-weight:600">Resi</span>';
+  const risk=(r.sc_risk||'').toLowerCase();
+  if(risk==='high'||risk==='very high') return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(240,74,74,.15);color:var(--rd);font-weight:600">High Risk</span>';
+  if(risk==='medium') return '<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(245,158,11,.12);color:var(--or);font-weight:600">Medium</span>';
+  if(r.sc_score!==''&&r.sc_score!==undefined) return '<span style="font-size:10px;color:var(--t2)">'+r.sc_score+'</span>';
+  return '<span style="color:var(--t2)">—</span>';
+}
+
+function _mkRow(r,idx){
+  const st=r.status==='ok'?'<span class="chk-badge ok">✓ OK</span>':'<span class="chk-badge err">✗ ERR</span>';
+  const lat=`<span class="${_latCls(r.latency)}">${_latFmt(r.latency)}</span>`;
+  const f=_flag(r.ip_iso||r.country_iso||'');
+  const country=r.country?f+esc(r.country):'—';
+  const tr=document.createElement('tr');
+  tr.dataset.idx=idx;
+  tr.innerHTML=`
+    <td style="color:var(--t2)">${idx+1}</td>
+    <td class="mono" style="max-width:190px" title="${esc(r.proxy)}">${esc(r.proxy)}</td>
+    <td>${st}</td>
+    <td>${lat}</td>
+    <td>${r.ip?`<code style="background:var(--s3);padding:1px 5px;border-radius:3px;font-family:monospace">${esc(r.ip)}</code>`:(r.status==='error'?`<span style="color:var(--rd);font-size:11px">${esc(r.error)}</span>`:'—')}</td>
+    <td style="max-width:150px" title="${esc(r.country)}">${country}</td>
+    <td>${esc(r.city)||'—'}</td>
+    <td style="max-width:150px" title="${esc(r.isp)}">${esc(r.isp)||'—'}</td>
+    <td style="font-size:11px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r.usage)}">${esc(r.usage)||'—'}</td>
+    <td>${_osBadge(r.tcp_os)}</td>
+    <td style="color:${r.tcp_mtu?'var(--t1)':'var(--t2)'}">${esc(r.tcp_mtu)||'—'}</td>
+    <td style="max-width:120px;font-size:11px" title="${esc(r.tcp_link)}">${esc(r.tcp_link)||'—'}</td>
+    <td class="mono" style="font-size:10px;max-width:160px" title="${esc(r.tcp_ja4t)}">${esc(r.tcp_ja4t)||'—'}</td>
+    <td>${_riskBadge(r)}</td>
+    <td><button class="btn btn-sm" title="Details" onclick="toggleDetail(this,${idx},event)" style="padding:2px 8px">⊕</button></td>
+  `;
+  return tr;
+}
+
+function _mkDetailRow(r){
+  const tr=document.createElement('tr');
+  tr.className='drow';
+  tr.innerHTML=`<td colspan="15">
+    <div class="dcontent">
+      <div>
+        <div class="dsec-title">📍 IP &amp; Location</div>
+        <div class="ditem"><span class="dkey">IP: </span><span class="dval mono">${_v(r.ip)}</span></div>
+        <div class="ditem"><span class="dkey">IPv6: </span><span class="dval mono">${_v(r.ipv6)}</span></div>
+        <div class="ditem"><span class="dkey">Hostname: </span><span class="dval">${_v(r.hostname)}</span></div>
+        <div class="ditem"><span class="dkey">Country: </span><span class="dval">${_v(r.country)} ${r.country_iso?'('+esc(r.country_iso)+')':''}</span></div>
+        <div class="ditem"><span class="dkey">Region: </span><span class="dval">${_v(r.region)}</span></div>
+        <div class="ditem"><span class="dkey">City: </span><span class="dval">${_v(r.city)}</span></div>
+        <div class="ditem"><span class="dkey">Timezone: </span><span class="dval">${_v(r.timezone)}</span></div>
+        <div class="ditem"><span class="dkey">Coords: </span><span class="dval mono">${_v(r.coords)}</span></div>
+      </div>
+      <div>
+        <div class="dsec-title">🏢 Network</div>
+        <div class="ditem"><span class="dkey">ISP: </span><span class="dval">${_v(r.isp)}</span></div>
+        <div class="ditem"><span class="dkey">Org: </span><span class="dval">${_v(r.org)}</span></div>
+        <div class="ditem"><span class="dkey">Network: </span><span class="dval">${_v(r.network)}</span></div>
+        <div class="ditem"><span class="dkey">Usage: </span><span class="dval">${_v(r.usage)}</span></div>
+        <div style="margin-top:10px" class="dsec-title">📋 Whois</div>
+        <div class="ditem"><span class="dkey">Range: </span><span class="dval mono">${_v(r.whois_range)}</span></div>
+        <div class="ditem"><span class="dkey">CIDR: </span><span class="dval mono">${_v(r.whois_cidr)}</span></div>
+        <div class="ditem"><span class="dkey">Name: </span><span class="dval">${_v(r.whois_name)}</span></div>
+        <div class="ditem"><span class="dkey">Org: </span><span class="dval">${_v(r.whois_org)}</span></div>
+        <div class="ditem"><span class="dkey">Registry: </span><span class="dval">${_v(r.whois_reg)}</span></div>
+        <div class="ditem"><span class="dkey">Country: </span><span class="dval">${_v(r.whois_country)}</span></div>
+        <div class="ditem"><span class="dkey">Net Type: </span><span class="dval">${_v(r.whois_type)}</span></div>
+        <div class="ditem"><span class="dkey">Created: </span><span class="dval">${_v(r.whois_created)}</span></div>
+        <div class="ditem"><span class="dkey">Changed: </span><span class="dval">${_v(r.whois_changed)}</span></div>
+      </div>
+      <div>
+        <div class="dsec-title">🔬 TCP/IP Fingerprint</div>
+        <div class="ditem"><span class="dkey">OS: </span><span class="dval">${_v(r.tcp_os)}</span></div>
+        <div class="ditem"><span class="dkey">MTU: </span><span class="dval">${_v(r.tcp_mtu)}</span></div>
+        <div class="ditem"><span class="dkey">Link Type: </span><span class="dval">${_v(r.tcp_link)}</span></div>
+        <div class="ditem"><span class="dkey">Distance: </span><span class="dval">${_v(r.tcp_dist)}</span></div>
+        <div class="ditem"><span class="dkey">JA4T: </span><span class="dval mono">${_v(r.tcp_ja4t)}</span></div>
+        <div style="margin-top:10px" class="dsec-title">🔒 TLS / HTTP2</div>
+        <div class="ditem"><span class="dkey">JA4: </span><span class="dval mono">${_v(r.tls_ja4)}</span></div>
+        <div class="ditem"><span class="dkey">JA3: </span><span class="dval mono">${_v(r.tls_ja3)}</span></div>
+        <div class="ditem"><span class="dkey">HTTP/2 Akamai: </span><span class="dval mono">${r.h2_akamai ? esc(r.h2_akamai) : '<span style="color:var(--t2)">n/a (HTTP/1.1)</span>'}</span></div>
+      </div>
+      <div>
+        <div class="dsec-title">🛡️ Fraud / Proxy Detection</div>
+        ${(()=>{
+          const score = r.sc_score ?? '';
+          const risk  = r.sc_risk || '';
+          const riskCls = risk ? `sc-${risk.replace(/\s/g,'_').toLowerCase()}` : '';
+          const scoreTxt = score !== '' ? `${score}/100` : '—';
+          const riskTxt  = risk  ? `<span class="${riskCls}">${esc(risk.toUpperCase())}</span>` : '—';
+          const flag2 = (val, label) => `<span class="sc-flag ${val?'sc-yes':'sc-no'}">${val?'✓':'✗'} ${label}</span>`;
+          return `
+        <div class="ditem"><span class="dkey">Fraud Score: </span><span class="dval">${scoreTxt} &nbsp;${riskTxt}</span></div>
+        <div class="ditem"><span class="dkey">ISP Score: </span><span class="dval">${r.sc_isp_score !== '' && r.sc_isp_score !== undefined ? r.sc_isp_score+'/100' : '—'} <span class="${r.sc_isp_risk ? 'sc-'+r.sc_isp_risk.replace(/\s/g,'_').toLowerCase() : ''}" style="font-size:11px">${r.sc_isp_risk ? r.sc_isp_risk.toUpperCase() : ''}</span></span></div>
+        <div class="ditem"><span class="dkey">Proxy Type: </span><span class="dval">${r.sc_proxy_type ? esc(r.sc_proxy_type) : '<span style="color:var(--t2)">—</span>'}</span></div>
+        <div class="ditem" style="margin-top:6px">${flag2(r.sc_is_vpn,'VPN')} ${flag2(r.sc_is_dc,'Datacenter')} ${flag2(r.sc_is_tor,'Tor')}</div>
+        <div class="ditem">${flag2(r.sc_is_proxy,'Proxy')} ${flag2(r.sc_spambot,'Spambot')} ${flag2(r.sc_blacklisted,'Blacklisted')}</div>
+        <div class="ditem" style="margin-top:6px">${flag2(r.sc_fh30,'Blacklist 30d')}</div>
+        ${r.sc_url ? `<div class="ditem" style="margin-top:6px"><a href="${esc(r.sc_url)}" target="_blank" style="color:var(--bl2);font-size:11px">→ View on Scamalytics</a></div>` : ''}
+          `;
+        })()}
+      </div>
+    </div>
+  </td>`;
+  return tr;
+}
+
+function toggleDetail(btn,idx,e){
+  e.stopPropagation();
+  const tbody=document.getElementById('tbody');
+  let targetRow=null;
+  for(const tr of tbody.querySelectorAll('tr[data-idx]')){
+    if(+tr.dataset.idx===idx){targetRow=tr;break;}
+  }
+  if(!targetRow)return;
+  const next=targetRow.nextElementSibling;
+  if(next&&next.classList.contains('drow')){
+    next.remove();targetRow.classList.remove('exp');btn.textContent='⊕';return;
+  }
+  tbody.querySelectorAll('.drow').forEach(r=>r.remove());
+  tbody.querySelectorAll('tr[data-idx]').forEach(r=>{r.classList.remove('exp');const b=r.querySelector('button');if(b)b.textContent='⊕';});
+  targetRow.classList.add('exp');btn.textContent='⊖';
+  targetRow.after(_mkDetailRow(_results[idx]));
+}
+
+function updStats(){
+  const total=+document.getElementById('s-total').textContent||0;
+  const ok=_results.filter(r=>r.status==='ok').length;
+  const err=_results.filter(r=>r.status==='error').length;
+  const pend=Math.max(0,total-_results.length);
+  document.getElementById('s-ok').textContent=ok;
+  document.getElementById('s-err').textContent=err;
+  document.getElementById('s-pend').textContent=pend;
+  const pct=total>0?Math.round(_results.length/total*100):0;
+  document.getElementById('s-pct').textContent=pct+'%';
+  document.getElementById('prog-bar').style.width=pct+'%';
+}
+
+function _gid(id){return document.getElementById(id);}
+function _gv(id){return (_gid(id)?.value||'').trim().toLowerCase();}
+function _gc(id){return _gid(id)?.checked||false;}
+
+function toggleFltPanel(){
+  const p=_gid('flt-panel');
+  p.classList.toggle('open');
+  _gid('flt-toggle-btn').classList.toggle('on', p.classList.contains('open'));
+}
+
+function setQFilter(f){
+  _qfilter=f;
+  document.querySelectorAll('.fbtn[data-f]').forEach(b=>b.classList.toggle('on',b.dataset.f===f));
+  applyFilters();
+}
+// Legacy alias
+function setFilter(f){ setQFilter(f==='err'?'error':f); }
+
+function rebuildCountrySelect(){
+  const sel=_gid('flt-country'); if(!sel) return;
+  const cur=sel.value;
+  const countries=[...new Set(_results.map(r=>r.country).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">All countries</option>'+countries.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  sel.value=cur;
+}
+
+function _matchFilter(r){
+  if(_qfilter==='ok'    && r.status!=='ok')    return false;
+  if(_qfilter==='error' && r.status!=='error') return false;
+  const q=_gv('flt-search');
+  if(q){
+    const hay=[r.proxy,r.ip,r.country,r.city,r.isp,r.org,r.hostname,r.network].join(' ').toLowerCase();
+    if(!hay.includes(q)) return false;
+  }
+  const fCountry=_gv('flt-country');
+  if(fCountry && (r.country||'').toLowerCase()!==fCountry.toLowerCase()) return false;
+  const fIsp=_gv('flt-isp');
+  if(fIsp && !(r.isp||'').toLowerCase().includes(fIsp) && !(r.org||'').toLowerCase().includes(fIsp)) return false;
+  const fUsage=_gv('flt-usage');
+  if(fUsage && !(r.usage||'').toLowerCase().includes(fUsage)) return false;
+  const fOs=_gv('flt-os');
+  if(fOs && !(r.tcp_os||'').toLowerCase().includes(fOs)) return false;
+  const fLink=_gv('flt-link');
+  if(fLink && !(r.tcp_link||'').toLowerCase().includes(fLink)) return false;
+  const fRisk=_gv('flt-risk');
+  if(fRisk && (r.sc_risk||'').toLowerCase()!==fRisk) return false;
+  const fScoreMax=_gid('flt-score-max').value;
+  if(fScoreMax!=='' && r.sc_score!==undefined && r.sc_score!=='' && Number(r.sc_score)>Number(fScoreMax)) return false;
+  const fLatMax=_gid('flt-lat-max').value;
+  if(fLatMax!=='' && r.latency && r.latency>Number(fLatMax)) return false;
+  if(_gc('flt-vpn')         && !r.sc_is_vpn)        return false;
+  if(_gc('flt-dc')          && !r.sc_is_dc)         return false;
+  if(_gc('flt-tor')         && !r.sc_is_tor)        return false;
+  if(_gc('flt-proxy')       && !r.sc_is_proxy)      return false;
+  if(_gc('flt-blacklisted') && !r.sc_blacklisted)   return false;
+  if(_gc('flt-h2')          && !r.h2_akamai)        return false;
+  return true;
+}
+
+function _countActiveFilters(){
+  let n=0;
+  if(_gv('flt-search'))    n++;
+  if(_gv('flt-country'))   n++;
+  if(_gv('flt-isp'))       n++;
+  if(_gv('flt-usage'))     n++;
+  if(_gv('flt-os'))        n++;
+  if(_gv('flt-link'))      n++;
+  if(_gv('flt-risk'))      n++;
+  if(_gid('flt-score-max').value!=='') n++;
+  if(_gid('flt-lat-max').value!=='')   n++;
+  ['flt-vpn','flt-dc','flt-tor','flt-proxy','flt-blacklisted','flt-h2'].forEach(id=>{if(_gc(id))n++;});
+  return n;
+}
+
+function applyFilters(){
+  const n=_countActiveFilters();
+  const badge=_gid('flt-badge');
+  badge.textContent=n; badge.style.display=n?'':'none';
+  _gid('flt-clear-btn').style.display=n||_qfilter!=='all'?'':'none';
+  _renderAll();
+}
+
+function clearFilters(){
+  _qfilter='all';
+  document.querySelectorAll('.fbtn[data-f]').forEach(b=>b.classList.toggle('on',b.dataset.f==='all'));
+  ['flt-search','flt-isp','flt-link'].forEach(id=>_gid(id).value='');
+  ['flt-country','flt-usage','flt-os','flt-risk'].forEach(id=>_gid(id).value='');
+  ['flt-score-max','flt-lat-max'].forEach(id=>_gid(id).value='');
+  ['flt-vpn','flt-dc','flt-tor','flt-proxy','flt-blacklisted','flt-h2'].forEach(id=>_gid(id).checked=false);
+  applyFilters();
+}
+
+function _renderAll(){
+  const tbody=_gid('tbody'); tbody.innerHTML='';
+  const filtered=_results.filter(_matchFilter);
+  filtered.forEach(r=>tbody.appendChild(_mkRow(r,_results.indexOf(r))));
+  const cnt=_gid('flt-result-count');
+  if(cnt) cnt.textContent=filtered.length<_results.length?`${filtered.length} / ${_results.length} shown`:'';
+}
+
+function appendRow(r){
+  rebuildCountrySelect();
+  if(_matchFilter(r)) _gid('tbody').appendChild(_mkRow(r,_results.indexOf(r)));
+  const cnt=_gid('flt-result-count');
+  if(cnt){ const shown=_gid('tbody').querySelectorAll('tr[data-idx]').length; cnt.textContent=shown<_results.length?`${shown} / ${_results.length} shown`:''; }
+}
+
+async function startCheck(){
+  _ck_init_once();
+  const raw=document.getElementById('proxy-input').value;
+  const proxies=raw.split('\n').map(p=>p.trim()).filter(Boolean);
+  if(!proxies.length){toast('Please enter at least one proxy.','err');return;}
+  _results=[];
+  document.getElementById('tbody').innerHTML='';
+  document.getElementById('empty').style.display='none';
+  document.getElementById('tbl').style.display='';
+  document.getElementById('prog-card').style.display='';
+  document.getElementById('toolbar').style.display='';
+  document.getElementById('s-total').textContent=proxies.length;
+  document.getElementById('s-ok').textContent=0;
+  document.getElementById('s-err').textContent=0;
+  document.getElementById('s-pend').textContent=proxies.length;
+  document.getElementById('s-pct').textContent='0%';
+  document.getElementById('prog-bar').style.width='0%';
+  document.getElementById('btn-check').disabled=true;
+  document.getElementById('btn-stop').disabled=false;
+  const concurrency=parseInt(document.getElementById('concurrency').value)||5;
+  const timeout=(parseInt(document.getElementById('timeout').value)||30)*1000;
+  let resp;
+  try{ resp=await fetch('/api/check',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':_key},body:JSON.stringify({proxies,concurrency,timeout})}); }
+  catch(e){ toast('Server error: '+e.message,'err'); resetBtns(); return; }
+  if(!resp.ok){
+    let msg='Request failed'; try{ const d=await resp.json(); msg=d.error||msg; }catch(_){}
+    toast(msg,'err'); resetBtns(); return;
+  }
+  const{jobId}=await resp.json();
+  if(_es) _es.close();
+  _es=new EventSource(`/api/stream/${jobId}`);
+  _es.onmessage=e=>{
+    const msg=JSON.parse(e.data);
+    if(msg.type==='result'){_results.push(msg.result);appendRow(msg.result);updStats();}
+    else if(msg.type==='done'){_es.close();_es=null;resetBtns();libRefresh();}
+  };
+  _es.onerror=()=>{if(_es){_es.close();_es=null;}resetBtns();};
+}
+
+function stopCheck(){if(_es){_es.close();_es=null;}resetBtns();}
+function resetBtns(){
+  document.getElementById('btn-check').disabled=false;
+  document.getElementById('btn-stop').disabled=true;
+}
+function clearAll(){
+  if(_es){_es.close();_es=null;}
+  _results=[];
+  document.getElementById('tbody').innerHTML='';
+  document.getElementById('tbl').style.display='none';
+  document.getElementById('empty').style.display='';
+  document.getElementById('prog-card').style.display='none';
+  document.getElementById('toolbar').style.display='none';
+  resetBtns();
+}
+
+// ── Customer Proxy Library ───────────────────────────────────────────────────
+let _libItems = [];
+async function libRefresh(){
+  try{
+    const r = await fetch('/api/customer/library',{headers:{'x-api-key':_key}});
+    if(!r.ok) return;
+    const d = await r.json();
+    _libItems = d.items || [];
+    libRender();
+  }catch(_){}
+}
+function libRender(){
+  const list = document.getElementById('lib-list');
+  const badge = document.getElementById('lib-total-badge');
+  const cnt = document.getElementById('lib-count-badge');
+  if(badge) badge.textContent = _libItems.length ? `(${_libItems.length})` : '';
+  if(cnt) cnt.textContent = _libItems.length ? `(${_libItems.length})` : '';
+  if(!list) return;
+  if(!_libItems.length){
+    list.innerHTML = '<div class="lib-empty">No saved proxies yet. Run a check to auto-save OK proxies.</div>';
+    return;
+  }
+  const riskColor = {high:'var(--rd)','very high':'var(--rd)',medium:'var(--or)',low:'var(--gr)'};
+  list.innerHTML = _libItems.map(item => {
+    const risk = item.sc_risk || '';
+    const score = item.sc_score !== '' && item.sc_score != null ? ` ${item.sc_score}%` : '';
+    const tags = [item.sc_is_vpn&&'VPN',item.sc_is_dc&&'DC',item.sc_is_tor&&'TOR'].filter(Boolean);
+    return `<div class="lib-item">
+      <span class="lib-item-proxy" title="${esc(item.proxy)}">${esc(item.proxy)}</span>
+      <span class="lib-item-meta">${esc(item.ip||'')}${item.country?' &bull; '+esc(item.country):''}</span>
+      ${risk?`<span class="lib-item-risk" style="color:${riskColor[risk.toLowerCase()]||'var(--t2)'}">${esc(risk)}${score}</span>`:''}
+      ${tags.length?`<span class="lib-item-tags">${tags.join(' ')}</span>`:''}
+      <button class="lib-del" onclick="libDelete('${encodeURIComponent(item.proxy)}')" title="Remove">&times;</button>
+    </div>`;
+  }).join('');
+}
+function libToggle(){
+  const p = document.getElementById('lib-panel');
+  if(!p) return;
+  const willShow = p.style.display === 'none';
+  p.style.display = willShow ? '' : 'none';
+  if(willShow) libRefresh();
+}
+async function libDelete(encodedProxy){
+  await fetch('/api/customer/library/' + encodedProxy, { method:'DELETE', headers:{'x-api-key':_key} });
+  await libRefresh();
+}
+async function libClearAll(){
+  if(!_libItems.length) return;
+  if(!confirm(`Delete all ${_libItems.length} saved proxies?`)) return;
+  await fetch('/api/customer/library', { method:'DELETE', headers:{'x-api-key':_key} });
+  await libRefresh();
+}
+function libLoad(){
+  if(!_libItems.length) return;
+  const ta = document.getElementById('proxy-input');
+  const existing = ta.value.trim().split(/\s+/).filter(Boolean);
+  const news = _libItems.map(i => i.proxy).filter(p => !existing.includes(p));
+  ta.value = [...existing, ...news].join('\n');
+  document.getElementById('proxy-count').textContent = ta.value.trim().split(/\s+/).filter(Boolean).length + ' proxies';
+}
+async function libExport(){
+  try{
+    const r = await fetch('/api/customer/library/export', { headers:{'x-api-key':_key} });
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'proxy-library.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+  }catch(e){ toast('Export failed','err'); }
+}
+
+function exportCsv(){
+  if(!_results.length)return;
+  const H=['Proxy','Status','Latency_ms','IP','Hostname','Country','Region','City','ISP','Org','Network','Usage','Timezone','Coords','TCP_OS','TCP_MTU','TCP_Link','TCP_Distance','JA4T','TLS_JA4','TLS_JA3','H2_Akamai','Whois_Range','Whois_CIDR','Whois_Name','IPv6','Error'];
+  const rows=_results.map(r=>[r.proxy,r.status,r.latency||'',r.ip||'',r.hostname||'',r.country||'',r.region||'',r.city||'',r.isp||'',r.org||'',r.network||'',r.usage||'',r.timezone||'',r.coords||'',r.tcp_os||'',r.tcp_mtu||'',r.tcp_link||'',r.tcp_dist||'',r.tcp_ja4t||'',r.tls_ja4||'',r.tls_ja3||'',r.h2_akamai||'',r.whois_range||'',r.whois_cidr||'',r.whois_name||'',r.ipv6||'',r.error||''].map(x=>`"${String(x).replace(/"/g,'""')}"`));
+  const csv=[H.join(','),...rows.map(r=>r.join(','))].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=`proxies-${new Date().toISOString().slice(0,16).replace(/:/g,'-')}.csv`;
+  document.body.appendChild(a);a.click();a.remove();
+}
+
+init();
+</script>
+</body>
+</html>
