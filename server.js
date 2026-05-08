@@ -697,6 +697,31 @@ function keyPublicView(k) {
 
 app.get('/api/admin/keys', requireVpnToken, (req, res) => {
   const keys = keysLoad();
+  // Refresh bandwidth_used_bytes from kernel counters on tun2socks devices
+  // for every key. Previously bandwidth_used_bytes only updated when the
+  // customer themselves hit /api/customer/usage, so the admin Users page
+  // showed 0 B for everyone until they logged in.
+  const gateways = gwLoad();
+  let mutated = false;
+  for (const id of Object.keys(keys)) {
+    const k = keys[id];
+    const myGws = Array.isArray(k.my_gateways) ? k.my_gateways : [];
+    let total = 0;
+    for (const name of myGws) {
+      const g = gateways[name];
+      if (!g || !g.t2s_dev) continue;
+      try {
+        const rx = parseInt(fs.readFileSync(`/sys/class/net/${g.t2s_dev}/statistics/rx_bytes`, 'utf8'), 10) || 0;
+        const tx = parseInt(fs.readFileSync(`/sys/class/net/${g.t2s_dev}/statistics/tx_bytes`, 'utf8'), 10) || 0;
+        total += rx + tx;
+      } catch (_) {}
+    }
+    if (total !== (k.bandwidth_used_bytes || 0)) {
+      k.bandwidth_used_bytes = total;
+      mutated = true;
+    }
+  }
+  if (mutated) { try { keysSave(keys); } catch (_) {} }
   res.json({ keys: Object.values(keys).map(keyPublicView) });
 });
 
