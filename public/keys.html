@@ -99,8 +99,8 @@ select option{background:var(--s2)}
         <button class="btn btn-primary btn-sm" onclick="openCreateModal()">+ New Customer</button>
       </div>
       <table>
-        <thead><tr><th>Customer</th><th>API Key</th><th>Permissions</th><th>Usage</th><th>Bandwidth</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
-        <tbody id="keys-tbody"><tr><td colspan="8" style="text-align:center;color:var(--t3);padding:30px">Loading&#8230;</td></tr></tbody>
+        <thead><tr><th>Customer</th><th>API Key</th><th>Permissions</th><th>Gateways &amp; Clients</th><th>Usage</th><th>Bandwidth</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
+        <tbody id="keys-tbody"><tr><td colspan="9" style="text-align:center;color:var(--t3);padding:30px">Loading&#8230;</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -181,7 +181,7 @@ async function loadKeys() {
     const d = await fetchApi('/api/admin/keys');
     const tb = document.getElementById('keys-tbody');
     const now = new Date();
-    if (!d.keys.length) { tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--t3);padding:30px">No customers yet. Create one!</td></tr>'; return; }
+    if (!d.keys.length) { tb.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--t3);padding:30px">No customers yet. Create one!</td></tr>'; return; }
     tb.innerHTML = d.keys.map(k => {
       const expired = k.expires_at && new Date(k.expires_at) < now;
       const status = !k.enabled ? '<span class="badge bd">Disabled</span>' : expired ? '<span class="badge br"><span class="dot"></span>Expired</span>' : '<span class="badge bg"><span class="dot"></span>Active</span>';
@@ -194,11 +194,26 @@ async function loadKeys() {
         const labels = {check_proxy:'Checker',view_gateways:'Gateways',vpn_clients:'VPN',l2tp_credentials:'L2TP'};
         return '<span class="badge bd" style="font-size:10px">'+(labels[p]||p)+'</span>';
       }).join(' ');
+      // Gateways & clients column: show allowed-gateways scope + per-gateway client counts.
+      const allowed = Array.isArray(k.allowed_gateways) && k.allowed_gateways.length
+        ? k.allowed_gateways.map(g => '<span class="badge bd" style="font-size:10px">'+esc(g)+'</span>').join(' ')
+        : '<span class="badge bg" style="font-size:10px">ALL</span>';
+      const byGw = k.vpn_clients_by_gateway || {};
+      const gwEntries = Object.keys(byGw).sort();
+      const clientsHtml = gwEntries.length
+        ? gwEntries.map(g => '<div class="text-xs" style="color:var(--t2);margin-top:2px">'+esc(g)+': <strong style="color:var(--bl2)">'+byGw[g]+'</strong> client'+(byGw[g]>1?'s':'')+'</div>').join('')
+        : '<div class="text-xs text-dim" style="margin-top:2px">no VPN clients</div>';
+      const totalClients = k.vpn_clients_count || 0;
       return `<tr>
         <td><strong>${esc(k.name)}</strong>${k.note?'<div class="text-xs text-dim" style="margin-top:2px">'+esc(k.note)+'</div>':''}</td>
         <td><span class="mono" style="color:var(--bl2)">${esc(k.key_preview)}</span><br><button class="btn btn-xs" style="margin-top:4px" onclick="copyFullKey('${esc(k.key)}')">&#128203; Copy</button></td>
         <td>${perms||'<span class="text-dim text-xs">none</span>'}</td>
-        <td>${k.proxy_checks_used||0}${k.proxy_check_limit?'/'+k.proxy_check_limit:''}<div class="prog"><div class="prog-bar ${barClass(chkPct)}" style="width:${chkPct}%"></div></div></td>
+        <td><div>${allowed}</div>${clientsHtml}</td>
+        <td>
+          <div class="text-xs" style="color:var(--t2)">Checks: <strong>${k.proxy_checks_used||0}</strong>${k.proxy_check_limit?' / '+k.proxy_check_limit:''}</div>
+          <div class="prog" style="margin:3px 0"><div class="prog-bar ${barClass(chkPct)}" style="width:${chkPct}%"></div></div>
+          <div class="text-xs" style="color:var(--t2)">VPN clients: <strong>${totalClients}</strong></div>
+        </td>
         <td>${fmtBytes(bwUsed)}${k.bandwidth_limit_gb?' / '+k.bandwidth_limit_gb+'GB':''}<div class="prog"><div class="prog-bar ${barClass(bwPct)}" style="width:${bwPct}%"></div></div></td>
         <td>${status}</td>
         <td class="text-sm">${fmtDate(k.expires_at)}</td>

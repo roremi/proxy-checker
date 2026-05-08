@@ -664,6 +664,14 @@ function requireApiKey(perms = []) {
 
 // ── Admin: Key CRUD (requires master VPN token) ────────────────────────────────
 function keyPublicView(k) {
+  // Summarise VPN clients per gateway so admin Users table can show
+  // which gateways each customer actually owns clients in.
+  const clients = Array.isArray(k.vpn_clients) ? k.vpn_clients : [];
+  const clientsByGateway = {};
+  for (const c of clients) {
+    const gw = c && c.gateway ? c.gateway : '?';
+    clientsByGateway[gw] = (clientsByGateway[gw] || 0) + 1;
+  }
   return {
     id: k.id, name: k.name, note: k.note || '',
     key_preview: k.key.slice(0, 8) + '…',
@@ -675,6 +683,12 @@ function keyPublicView(k) {
     bandwidth_used_bytes: k.bandwidth_used_bytes || 0,
     proxy_check_limit: k.proxy_check_limit || null,
     proxy_checks_used: k.proxy_checks_used || 0,
+    vpn_clients_count: clients.length,
+    vpn_clients_by_gateway: clientsByGateway,
+    vpn_clients: clients.map(c => ({
+      cert_name: c.cert_name, client_name: c.client_name,
+      gateway: c.gateway, created_at: c.created_at || null,
+    })),
     expires_at: k.expires_at || null,
     created_at: k.created_at,
     last_used_at: k.last_used_at || null,
