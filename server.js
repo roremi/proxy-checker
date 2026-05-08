@@ -545,7 +545,7 @@ const WG_CONF    = '/etc/wireguard/wg0.conf';
 const WG_DIR     = '/etc/wireguard';
 const WG_DATA    = path.join(__dirname, 'vpn-clients.json');
 const SS_CONF    = '/etc/shadowsocks-libev/config.json';
-const SERVER_IP  = '103.162.14.102';
+const SERVER_IP  = process.env.SERVER_IP || 'multiebay.com';
 const VPN_TOKEN  = process.env.VPN_TOKEN || 'vpnadmin2026';
 const PORT       = process.env.PORT || 3000;
 
