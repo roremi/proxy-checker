@@ -772,10 +772,18 @@ function requireApiKey(perms = []) {
       return res.status(403).json({ error: 'API key expired', expired_at: entry.expires_at });
     if (perms.length && !perms.every(p => (entry.permissions || []).includes(p)))
       return res.status(403).json({ error: 'Permission denied', required: perms, has: entry.permissions });
-    // Update last_used_at (non-blocking)
-    entry.last_used_at = new Date().toISOString();
-    keys[entry.id] = entry;
-    setImmediate(() => keysSave(keys));
+    // Update last_used_at (non-blocking) without overwriting concurrent writes.
+    const lastUsedAt = new Date().toISOString();
+    entry.last_used_at = lastUsedAt;
+    setImmediate(() => {
+      try {
+        const fresh = keysLoad();
+        if (fresh[entry.id]) {
+          fresh[entry.id].last_used_at = lastUsedAt;
+          keysSave(fresh);
+        }
+      } catch (_) {}
+    });
     req.apiKey = entry;
     next();
   };
