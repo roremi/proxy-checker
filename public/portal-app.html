@@ -515,7 +515,13 @@ textarea{resize:vertical}
       <div class="fg">
         <label>Proxy URL</label>
         <input type="text" id="proxy-url-input" placeholder="http://user:pass@1.2.3.4:8080  or  socks5://host:port">
-        <p class="hint">Supported: <code>http://</code>, <code>https://</code>, <code>socks5://</code>, <code>socks4://</code> — with or without authentication.</p>
+        <p class="hint">SOCKS5 is recommended. HTTP/HTTPS requires explicit opt-in and runs tunnel in TCP-only mode (UDP/WebRTC blocked).</p>
+      </div>
+      <div class="fg" style="margin-top:-4px">
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+          <input type="checkbox" id="add-allow-http" style="width:14px;height:14px">
+          Allow HTTP/HTTPS upstream (TCP-only mode: UDP/WebRTC blocked)
+        </label>
       </div>
       <div id="add-proxy-result" style="display:none">
         <div class="alert alert-ok" id="add-proxy-ok-msg"></div>
@@ -550,7 +556,13 @@ textarea{resize:vertical}
       <div class="fg">
         <label>New proxy URL</label>
         <input type="text" id="cp-new" placeholder="socks5://user:pass@host:port  or  http://host:port">
-        <p class="hint">Supported: <code>http://</code>, <code>https://</code>, <code>socks5://</code>, <code>socks4://</code>.</p>
+        <p class="hint">SOCKS5 is recommended. HTTP/HTTPS requires explicit opt-in and runs tunnel in TCP-only mode (UDP/WebRTC blocked).</p>
+      </div>
+      <div class="fg" style="margin-top:-4px">
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
+          <input type="checkbox" id="cp-allow-http" style="width:14px;height:14px">
+          Allow HTTP/HTTPS upstream (TCP-only mode: UDP/WebRTC blocked)
+        </label>
       </div>
       <div id="cp-result" style="display:none"></div>
     </div>
@@ -634,6 +646,39 @@ textarea{resize:vertical}
   </div>
 </div>
 
+<!-- Modal: WireGuard per-tunnel manager -->
+<div class="overlay" id="wg-modal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head"><h3>&#9889; WireGuard &mdash; <span id="wg-modal-gw" style="color:var(--pu)"></span></h3><button class="close-btn" onclick="closeWgModal()">&#215;</button></div>
+    <div class="modal-body" style="max-height:70vh;overflow-y:auto">
+      <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">Create New Client</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px">
+        <div style="flex:1"><input type="text" id="wgm-name" placeholder="device name (phone, router1, laptop)" maxlength="24" oninput="this.value=this.value.replace(/[^a-zA-Z0-9_-]/g,'')"></div>
+        <button class="btn btn-primary btn-sm" id="wgm-gen-btn" onclick="wgmCreate()">Generate .conf</button>
+      </div>
+      <div id="wgm-result" style="display:none">
+        <div style="display:flex;justify-content:center;margin-bottom:10px"><img id="wgm-qr" alt="WireGuard QR" style="max-width:180px;border-radius:8px;border:1px solid var(--b1)"></div>
+        <div class="key-box" id="wgm-conf" style="max-height:160px;overflow:auto"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px">
+          <button class="btn btn-primary btn-sm" onclick="wgmDownload()">&#11015; Download .conf</button>
+          <button class="btn btn-sm" onclick="wgmCopy()">&#128203; Copy config</button>
+        </div>
+      </div>
+      <div style="height:1px;background:var(--b1);margin:14px 0"></div>
+      <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;display:flex;align-items:center;gap:8px">Existing Clients <button class="btn btn-xs" onclick="wgmLoadClients()">&#8635; Refresh</button></div>
+      <div id="wgm-clients"><div class="text-xs text-dim">Loading&#8230;</div></div>
+      <div style="height:1px;background:var(--b1);margin:14px 0"></div>
+      <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">How to Connect</div>
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-size:12px;line-height:1.8">
+        <strong>iOS / Android:</strong> Install WireGuard app, tap <strong>+</strong>, scan QR or import .conf file.<br>
+        <strong>Windows / macOS:</strong> Install WireGuard app, click <strong>Import tunnel(s) from file</strong>.<br>
+        <strong>Linux:</strong> <code style="background:rgba(61,126,248,.1);color:var(--bl2);padding:1px 5px;border-radius:3px">wg-quick up yourfile.conf</code>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-sm" onclick="closeWgModal()">Close</button></div>
+  </div>
+</div>
+
 <!-- Modal: L2TP per-tunnel manager -->
 <div class="overlay" id="l2tp-modal">
   <div class="modal" style="max-width:680px">
@@ -673,6 +718,7 @@ let _me = null, _results = [], _filter = 'all', _es = null;
 let _addOvpnContent = '', _addOvpnName = '';
 let _newClientGw = '', _newClientContent = '', _newClientFileName = '';
 let _redownContent = '', _redownFileName = '';
+let _wgmGw = '', _wgmConf = '', _wgmName = '', _wgmQr = '';
 let _keyVisible = false;
 
 async function fetchC(url, opts={}) {
@@ -865,6 +911,7 @@ async function loadProxies(){
             </div>
             <div class="btn-row" style="flex-wrap:wrap;justify-content:flex-end;gap:5px">
               <button class="btn btn-xs btn-primary" onclick="openOvpnModal('${esc(g.name)}')">&#128274; OpenVPN</button>
+              <button class="btn btn-xs" onclick="openWgModal('${esc(g.name)}')">&#9889; WireGuard</button>
               <button class="btn btn-xs btn-purple" onclick="openL2tpModal('${esc(g.name)}')">&#128225; L2TP</button>
               ${g.mitm_running
                 ? `<button class="btn btn-xs btn-warn" onclick="cToggleMitm('${esc(g.name)}',true)">Stop MITM</button>`
@@ -879,7 +926,7 @@ async function loadProxies(){
           <div class="pvpn-body">
             <div class="inforow" style="margin-bottom:12px">
               <div class="infobox"><div class="lbl">Exit IP</div><div class="val text-blue" style="display:flex;align-items:center;gap:6px"><span id="exit-ip-${esc(g.name)}">${esc(g.exit_ip||'Pending')}</span> <button class="btn btn-xs" style="padding:2px 6px;font-size:10px" title="Re-test exit IP" onclick="checkTunnelIp('${esc(g.name)}')">&#8635;</button></div></div>
-              <div class="infobox"><div class="lbl">Protocol</div><div class="val">OpenVPN UDP</div></div>
+              <div class="infobox"><div class="lbl">Protocol</div><div class="val">OpenVPN / WireGuard / L2TP</div></div>
               <div class="infobox"><div class="lbl">Port</div><div class="val">${g.vpn_port||'—'}</div></div>
               <div class="infobox"><div class="lbl">Country</div><div class="val">${esc(g.country||'—')}</div></div>
             </div>
@@ -902,6 +949,7 @@ async function loadProxies(){
 // Add proxy modal
 function openAddProxy(){
   document.getElementById('proxy-url-input').value='';
+  document.getElementById('add-allow-http').checked = false;
   document.getElementById('add-proxy-result').style.display='none';
   document.getElementById('add-proxy-btn').style.display='';
   _addOvpnContent=''; _addOvpnName='';
@@ -910,10 +958,11 @@ function openAddProxy(){
 function closeAddProxy(){ document.getElementById('add-proxy-modal').classList.remove('open'); }
 async function submitAddProxy(){
   const url = document.getElementById('proxy-url-input').value.trim();
+  const allow_http_proxy = !!document.getElementById('add-allow-http').checked;
   if(!url){ toast('Enter a proxy URL','err'); return; }
   const btn=document.getElementById('add-proxy-btn'); btn.disabled=true; btn.textContent='Building tunnel...';
   try {
-    const d = await fetchC('/api/customer/proxy',{method:'POST',body:JSON.stringify({proxy_url:url})});
+    const d = await fetchC('/api/customer/proxy',{method:'POST',body:JSON.stringify({proxy_url:url, allow_http_proxy})});
     _addOvpnContent = d.ovpn||''; _addOvpnName = `${d.gateway||'vpn'}-default.ovpn`;
     const msg = document.getElementById('add-proxy-ok-msg');
     msg.textContent = `✓ VPN tunnel "${d.gateway}" created! Exit IP: ${d.exit_ip||'(pending)'}`;
@@ -933,6 +982,7 @@ function openChangeProxy(name, currentDisplay){
   document.getElementById('cp-name').value = name;
   document.getElementById('cp-current').value = currentDisplay || '';
   document.getElementById('cp-new').value = '';
+  document.getElementById('cp-allow-http').checked = false;
   document.getElementById('cp-result').style.display = 'none';
   const btn = document.getElementById('cp-btn');
   btn.disabled = false; btn.innerHTML = '&#9889; Test &amp; Apply';
@@ -942,6 +992,7 @@ function closeChangeProxy(){ document.getElementById('change-proxy-modal').class
 async function submitChangeProxy(){
   const name = document.getElementById('cp-name').value;
   const url  = document.getElementById('cp-new').value.trim();
+  const allow_http_proxy = !!document.getElementById('cp-allow-http').checked;
   if(!url){ toast('Enter a new proxy URL','err'); return; }
   const btn = document.getElementById('cp-btn');
   const out = document.getElementById('cp-result');
@@ -950,7 +1001,7 @@ async function submitChangeProxy(){
   out.innerHTML = '<div class="alert alert-info">Testing the new proxy and restarting the tunnel…</div>';
   try {
     const d = await fetchC(`/api/customer/proxy/${encodeURIComponent(name)}`, {
-      method: 'PUT', body: JSON.stringify({ proxy_url: url })
+      method: 'PUT', body: JSON.stringify({ proxy_url: url, allow_http_proxy })
     });
     out.innerHTML = `<div class="alert alert-ok">✓ Proxy updated. New exit IP: <b>${esc(d.exit_ip||'pending')}</b> (${esc(d.proxy_scheme||'')})</div>`;
     toast('Proxy updated');
@@ -1157,6 +1208,77 @@ async function ovmRevoke(certName, clientName){
   });
 }
 
+// ── WireGuard modal (per tunnel) ────────────────────────────────────────────
+function openWgModal(name){
+  _wgmGw = name; _wgmConf = ''; _wgmName = ''; _wgmQr = '';
+  document.getElementById('wg-modal-gw').textContent = name;
+  document.getElementById('wgm-name').value = 'default';
+  document.getElementById('wgm-result').style.display = 'none';
+  document.getElementById('wg-modal').classList.add('open');
+  wgmLoadClients();
+}
+function closeWgModal(){ document.getElementById('wg-modal').classList.remove('open'); }
+async function wgmCreate(){
+  const cn = document.getElementById('wgm-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'') || 'default';
+  const btn = document.getElementById('wgm-gen-btn'); btn.disabled = true; btn.textContent = 'Generating…';
+  try {
+    const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(_wgmGw)}/wg-client`, { method:'POST', body:JSON.stringify({ client_name: cn }) });
+    _wgmConf = d.conf || ''; _wgmName = d.wg_name || cn; _wgmQr = d.qr || '';
+    document.getElementById('wgm-conf').textContent = _wgmConf;
+    document.getElementById('wgm-qr').src = _wgmQr || '';
+    document.getElementById('wgm-result').style.display = 'block';
+    toast(d.existing ? 'WireGuard config loaded' : 'WireGuard client created');
+    wgmLoadClients();
+  } catch(e){ toast(e.message, 'err'); }
+  finally { btn.disabled = false; btn.textContent = 'Generate .conf'; }
+}
+function wgmDownload(){
+  if (!_wgmConf) return;
+  const b = new Blob([_wgmConf], {type:'text/plain'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `${_wgmName || _wgmGw}.conf`; a.click();
+}
+function wgmCopy(){ if(!_wgmConf) return; navigator.clipboard.writeText(_wgmConf).then(()=>toast('Copied!')); }
+async function wgmLoadClients(){
+  const el = document.getElementById('wgm-clients');
+  el.innerHTML = '<div class="text-xs text-dim">Loading…</div>';
+  try {
+    const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(_wgmGw)}/wg-clients`);
+    const clients = d.clients || [];
+    if (!clients.length){ el.innerHTML = '<div class="text-xs text-dim" style="padding:6px 0">No clients yet.</div>'; return; }
+    el.innerHTML = clients.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:6px">
+      <div style="flex:1">
+        <div style="font-family:monospace;font-size:12px;font-weight:700;color:var(--gr)">${esc(c.client_name)}</div>
+        <div class="text-xs text-dim" style="font-family:monospace;margin-top:2px">${esc(c.wg_name)} ${c.ip?`(${esc(c.ip)})`:''}</div>
+      </div>
+      <button class="btn btn-xs btn-green" onclick="wgmShow('${esc(c.wg_name)}')">Show</button>
+      <button class="btn btn-xs btn-danger" onclick="wgmDelete('${esc(c.wg_name)}','${esc(c.client_name)}')">&#10005;</button>
+    </div>`).join('');
+  } catch(e){ el.innerHTML = `<div class="text-xs" style="color:var(--rd)">${esc(e.message)}</div>`; }
+}
+async function wgmShow(wgName){
+  try {
+    const d = await fetchC(`/api/customer/wg/client/${encodeURIComponent(wgName)}`);
+    _wgmConf = d.conf || ''; _wgmName = d.wg_name || wgName; _wgmQr = d.qr || '';
+    document.getElementById('wgm-conf').textContent = _wgmConf;
+    document.getElementById('wgm-qr').src = _wgmQr || '';
+    document.getElementById('wgm-result').style.display = 'block';
+  } catch(e){ toast(e.message,'err'); }
+}
+async function wgmDelete(wgName, clientName){
+  showConfirm({
+    icon:'&#10005;', iconBg:'rgba(240,74,74,.12)', iconColor:'#f04a4a',
+    title:`Revoke WireGuard "${clientName||wgName}"?`,
+    msg:'This WireGuard config will no longer connect.',
+    confirmText:'Revoke', confirmClass:'btn-danger',
+    onConfirm: async ()=>{
+      try {
+        await fetchC(`/api/customer/wg/client/${encodeURIComponent(wgName)}`, { method:'DELETE' });
+        toast('Revoked'); wgmLoadClients();
+      } catch(e){ toast(e.message,'err'); }
+    }
+  });
+}
+
 // ── L2TP modal (per tunnel) ──────────────────────────────────────────────────
 let _l2mGw='', _l2mData=null;
 function openL2tpModal(name){
@@ -1336,7 +1458,7 @@ function androidGuide(){ return guideStep(1,'Install OpenVPN for Android','Insta
 function l2tpGuide(){ return `<div style="padding:12px 14px;background:rgba(155,116,245,.07);border:1px solid rgba(155,116,245,.2);border-radius:8px;font-size:12px;color:var(--t2);margin-bottom:16px">&#9432; First, get your L2TP credentials: <b>L2TP / IPSec</b> tab → select a tunnel → copy Server IP, PSK, username & password.</div>`+guideStep('W','Windows','Settings → Network → VPN → <b>Add VPN</b> → Provider: Windows built-in → Type: <b>L2TP/IPsec with pre-shared key</b> → enter Server, PSK, Username, Password.')+guideStep('&#63743;','iPhone / iPad / macOS','Settings → General → VPN → <b>Add VPN Configuration</b> → Type: <b>L2TP</b> → Server, Account, Password, Secret (PSK).')+guideStep('A','Android','Settings → Network → VPN → <b>+</b> → Type: <b>L2TP/IPSec PSK</b> → Server, pre-shared key, Username, Password.'); }
 
 // Close modals on backdrop click
-['add-proxy-modal','change-proxy-modal','new-client-modal','redown-modal','ovpn-modal','l2tp-modal'].forEach(id=>{
+['add-proxy-modal','change-proxy-modal','new-client-modal','redown-modal','ovpn-modal','wg-modal','l2tp-modal'].forEach(id=>{
   document.getElementById(id).addEventListener('click',e=>{ if(e.target===document.getElementById(id)) document.getElementById(id).classList.remove('open'); });
 });
 

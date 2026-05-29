@@ -117,7 +117,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
   </div>
   <div class="content">
     <div class="warn-box">
-      <strong>Auto-detect:</strong> Accepts SOCKS5 or HTTP proxy &#8212; <code>scheme://user:pass@host:port</code>, <code>host:port:user:pass</code>, or <code>host:port</code>. Protocol is auto-detected via live test.
+      <strong>Auto-detect:</strong> Supports SOCKS5 by default. HTTP/HTTPS requires explicit opt-in and will run the gateway in <strong>TCP-only mode</strong> (UDP/WebRTC blocked).
       <strong>For full UDP/DNS support</strong>, use SOCKS5 with UDP ASSOCIATE. L2TP credentials are auto-generated on creation.
     </div>
     <div class="card">
@@ -128,6 +128,12 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
           <div><label>Proxy URL (SOCKS5 / HTTP)</label><input type="text" id="gw-proxy" placeholder="host:port:user:pass  or  socks5://user:pass@host:port"></div>
           <div><label>VPN Port (optional)</label><input type="number" id="gw-port" placeholder="auto"></div>
           <button class="btn btn-primary" id="create-btn" onclick="createGateway()">+ Create</button>
+        </div>
+        <div class="note" style="margin-top:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="gw-allow-http" style="width:14px;height:14px">
+            Allow HTTP/HTTPS upstream proxy (TCP-only mode: UDP/WebRTC blocked to prevent leak)
+          </label>
         </div>
         <div class="note">Proxy is live-tested before creation. L2TP credentials are auto-generated with the gateway name.</div>
       </div>
@@ -146,6 +152,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
     <div class="modal-head"><h3>VPN Clients &#8212; <span id="vm-gw" style="color:var(--pu)"></span></h3><button class="close-btn" onclick="closeVpnModal()">&#215;</button></div>
     <div class="modal-tabs">
       <button class="m-tab active" id="tab-btn-ovpn" onclick="vmSwitchTab('ovpn')">&#128274; OpenVPN</button>
+      <button class="m-tab" id="tab-btn-wg" onclick="vmSwitchTab('wg')">&#9889; WireGuard</button>
       <button class="m-tab" id="tab-btn-l2tp" onclick="vmSwitchTab('l2tp')">&#128225; L2TP/IPSec</button>
     </div>
     <div class="modal-body" id="tab-ovpn">
@@ -172,6 +179,27 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
         <strong>Windows / macOS:</strong> OpenVPN Connect &#8594; Import Profile &#8594; Browse &#8594; select .ovpn<br>
         <strong>Linux:</strong> <code>sudo openvpn --config yourfile.ovpn</code>
       </div>
+    </div>
+    <div class="modal-body" id="tab-wg" style="display:none">
+      <div class="alert info" style="margin-bottom:12px">
+        WireGuard profiles are managed on the server-level interface (<code>wg0</code>). Gateway name is used as a naming prefix only.
+      </div>
+      <div class="slbl">Create New WireGuard Client</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:16px">
+        <div style="flex:1"><input type="text" id="wg-name" placeholder="wg client name (letters, numbers, _ -)" maxlength="32"></div>
+        <button class="btn btn-primary btn-sm" id="wg-gen-btn" onclick="wgCreate()">Generate .conf</button>
+      </div>
+      <div id="wg-result" style="display:none">
+        <div style="display:flex;justify-content:center;margin-bottom:10px"><img id="wg-qr" alt="WireGuard QR" style="max-width:180px;border-radius:8px;border:1px solid var(--line)"></div>
+        <div class="conf-box" id="wg-conf"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn btn-primary btn-sm" onclick="wgDownload()">&#11015; Download .conf</button>
+          <button class="btn btn-sm" onclick="wgCopy()">&#128203; Copy config</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="slbl" style="display:flex;align-items:center;gap:8px">Existing WG Clients <button class="btn btn-xs" onclick="wgLoadClients()">&#8635; Refresh</button></div>
+      <div id="wg-clients"><div style="color:var(--t3);font-size:12px;padding:6px 0">Loading&#8230;</div></div>
     </div>
     <div class="modal-body" id="tab-l2tp" style="display:none">
       <div id="l2tp-loading" style="color:var(--t3);padding:20px 0;text-align:center">Loading credentials&#8230;</div>
@@ -228,6 +256,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
 const _tok = localStorage.getItem('_admin_token');
 if (!_tok) location.replace('/login');
 let _vmGw = '', _vmTab = 'ovpn', _l2Data = null, _ovConf = '', _ovClientName = '';
+let _wgConf = '', _wgClientName = '', _wgQr = '';
 async function fetchApi(url, opts = {}) {
   opts.headers = { ...(opts.headers||{}), 'x-vpn-token': _tok, 'Content-Type': 'application/json' };
   let r; try { r = await fetch(url, opts); } catch(e) { throw new Error('Network: ' + e.message); }
@@ -254,19 +283,22 @@ async function loadGateways() {
       const running = g.vpn_running && g.tun_running; const partial = g.vpn_running !== g.tun_running;
       const sb = running ? '<span class="badge bg"><span class="dot"></span>Running</span>' : partial ? '<span class="badge bo"><span class="dot"></span>Partial</span>' : '<span class="badge br"><span class="dot"></span>Stopped</span>';
       const mb = g.mitm_running ? '<span class="badge bg" style="font-size:10px">ON</span>' : '<span class="badge bd" style="font-size:10px">OFF</span>';
-      return `<tr><td><strong>${esc(g.name)}</strong><div class="text-xs text-dim mono" style="margin-top:2px">${esc(g.proxy_display||'')}</div></td><td>${sb}</td><td class="mono">${g.vpn_port}</td><td><span class="mono">${esc(g.exit_ip||'?')}</span> <button class="btn btn-xs" onclick="retest('${esc(g.name)}')">&#8635;</button></td><td>${g.client_count||0}</td><td>${mb}<div class="text-xs text-dim" style="margin-top:2px">:${g.mitm_port||'?'}</div></td><td><div class="btn-row"><button class="btn btn-primary btn-sm" onclick="openVpnModal('${esc(g.name)}','ovpn')">&#128274; OpenVPN</button><button class="btn btn-purple btn-sm" onclick="openVpnModal('${esc(g.name)}','l2tp')">&#128225; L2TP</button><button class="btn btn-sm" onclick="copyUserLink('${esc(g.name)}')">&#128279;</button>${g.mitm_running ? `<button class="btn btn-warn btn-sm" onclick="toggleMitm('${esc(g.name)}',true)">Stop MITM</button>` : `<button class="btn btn-sm" onclick="toggleMitm('${esc(g.name)}',false)">MITM</button>`}<button class="btn btn-sm" onclick="toggleGw('${esc(g.name)}',${running})">${running?'Stop':'Start'}</button><button class="btn btn-sm" onclick="restartGw('${esc(g.name)}')">&#8635;</button><button class="btn btn-danger btn-sm" onclick="deleteGw('${esc(g.name)}')">&#10005;</button></div></td></tr>`;
+      return `<tr><td><strong>${esc(g.name)}</strong><div class="text-xs text-dim mono" style="margin-top:2px">${esc(g.proxy_display||'')}</div></td><td>${sb}</td><td class="mono">${g.vpn_port}</td><td><span class="mono">${esc(g.exit_ip||'?')}</span> <button class="btn btn-xs" onclick="retest('${esc(g.name)}')">&#8635;</button></td><td>${g.client_count||0}</td><td>${mb}<div class="text-xs text-dim" style="margin-top:2px">:${g.mitm_port||'?'}</div></td><td><div class="btn-row"><button class="btn btn-primary btn-sm" onclick="openVpnModal('${esc(g.name)}','ovpn')">&#128274; OpenVPN</button><button class="btn btn-sm" onclick="openVpnModal('${esc(g.name)}','wg')">&#9889; WireGuard</button><button class="btn btn-purple btn-sm" onclick="openVpnModal('${esc(g.name)}','l2tp')">&#128225; L2TP</button><button class="btn btn-sm" onclick="copyUserLink('${esc(g.name)}')">&#128279;</button>${g.mitm_running ? `<button class="btn btn-warn btn-sm" onclick="toggleMitm('${esc(g.name)}',true)">Stop MITM</button>` : `<button class="btn btn-sm" onclick="toggleMitm('${esc(g.name)}',false)">MITM</button>`}<button class="btn btn-sm" onclick="toggleGw('${esc(g.name)}',${running})">${running?'Stop':'Start'}</button><button class="btn btn-sm" onclick="restartGw('${esc(g.name)}')">&#8635;</button><button class="btn btn-danger btn-sm" onclick="deleteGw('${esc(g.name)}')">&#10005;</button></div></td></tr>`;
     }).join('');
   } catch(e) { toast(e.message, 'err'); }
 }
 async function createGateway() {
   const name = document.getElementById('gw-name').value.trim(); const proxy_url = document.getElementById('gw-proxy').value.trim(); const vpn_port = parseInt(document.getElementById('gw-port').value,10)||undefined;
+  const allow_http_proxy = !!document.getElementById('gw-allow-http').checked;
   if (!name || !proxy_url) return toast('Name and proxy required','err');
   const btn = document.getElementById('create-btn'); btn.textContent = 'Testing proxy...'; btn.disabled = true;
   try {
-    const body = { name, proxy_url }; if (vpn_port) body.vpn_port = vpn_port;
+    const body = { name, proxy_url, allow_http_proxy }; if (vpn_port) body.vpn_port = vpn_port;
     const d = await fetchApi('/api/gateways', { method:'POST', body:JSON.stringify(body) });
     toast('Created! Port: '+d.vpn_port+' Exit IP: '+d.exit_ip);
-    ['gw-name','gw-proxy','gw-port'].forEach(id => document.getElementById(id).value = ''); loadGateways();
+    ['gw-name','gw-proxy','gw-port'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('gw-allow-http').checked = false;
+    loadGateways();
   } catch(e) { toast(e.message,'err'); } finally { btn.textContent='+ Create'; btn.disabled=false; }
 }
 async function deleteGw(name) {
@@ -289,8 +321,23 @@ async function retest(name) {
   try { const d=await fetchApi('/api/gateways/'+encodeURIComponent(name)+'/test',{method:'POST'}); toast('Exit IP: '+d.exit_ip); loadGateways(); } catch(e) { toast(e.message,'err'); }
 }
 function copyUserLink(name) { const url=location.origin+'/g?name='+encodeURIComponent(name); navigator.clipboard.writeText(url).catch(()=>{}); window.open(url,'_blank'); }
-function openVpnModal(name,tab) { _vmGw=name; _ovConf=''; _ovClientName=''; document.getElementById('vm-gw').textContent=name; document.getElementById('ov-name').value=''; document.getElementById('ov-result').style.display='none'; document.getElementById('vpn-modal').classList.add('open'); vmSwitchTab(tab||'ovpn'); }
-function vmSwitchTab(tab) { _vmTab=tab; ['ovpn','l2tp'].forEach(t=>{ document.getElementById('tab-btn-'+t).classList.toggle('active',t===tab); document.getElementById('tab-'+t).style.display=t===tab?'':'none'; }); if(tab==='ovpn')ovLoadClients(); if(tab==='l2tp')l2Load(); }
+function openVpnModal(name,tab) {
+  _vmGw=name; _ovConf=''; _ovClientName=''; _wgConf=''; _wgClientName=''; _wgQr='';
+  document.getElementById('vm-gw').textContent=name;
+  document.getElementById('ov-name').value='';
+  document.getElementById('ov-result').style.display='none';
+  document.getElementById('wg-name').value = `${name}_wg`;
+  document.getElementById('wg-result').style.display='none';
+  document.getElementById('vpn-modal').classList.add('open');
+  vmSwitchTab(tab||'ovpn');
+}
+function vmSwitchTab(tab) {
+  _vmTab=tab;
+  ['ovpn','wg','l2tp'].forEach(t=>{ document.getElementById('tab-btn-'+t).classList.toggle('active',t===tab); document.getElementById('tab-'+t).style.display=t===tab?'':'none'; });
+  if(tab==='ovpn')ovLoadClients();
+  if(tab==='wg')wgLoadClients();
+  if(tab==='l2tp')l2Load();
+}
 function closeVpnModal() { document.getElementById('vpn-modal').classList.remove('open'); }
 async function ovCreate() {
   const cn=document.getElementById('ov-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,''); if(!cn) return toast('Enter a device name','err');
@@ -305,6 +352,97 @@ async function ovLoadClients() {
 }
 async function ovRedownload(c) { try { const d=await fetchApi('/api/gateways/'+encodeURIComponent(_vmGw)+'/client/'+encodeURIComponent(c)+'/ovpn'); _ovConf=d.ovpn; _ovClientName=c; document.getElementById('ov-conf').textContent=d.ovpn; document.getElementById('ov-result').style.display='block'; toast('Config loaded'); } catch(e) { toast(e.message,'err'); } }
 async function ovRevoke(c) { if(!confirm('Revoke cert for "'+c+'"?'))return; try { await fetchApi('/api/gateways/'+encodeURIComponent(_vmGw)+'/client/'+encodeURIComponent(c),{method:'DELETE'}); toast('Revoked'); ovLoadClients(); } catch(e) { toast(e.message,'err'); } }
+
+async function wgCreate() {
+  const name = document.getElementById('wg-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'').slice(0,32);
+  if (!name) return toast('Enter WireGuard client name','err');
+  const btn = document.getElementById('wg-gen-btn');
+  btn.textContent = 'Generating...'; btn.disabled = true;
+  try {
+    const d = await fetchApi('/api/vpn/wg/client', { method:'POST', body:JSON.stringify({ name }) });
+    _wgConf = d.conf || '';
+    _wgClientName = d.name || name;
+    _wgQr = d.qr || '';
+    document.getElementById('wg-conf').textContent = _wgConf;
+    document.getElementById('wg-qr').src = _wgQr;
+    document.getElementById('wg-result').style.display = 'block';
+    toast('WireGuard client created');
+    wgLoadClients();
+  } catch (e) { toast(e.message,'err'); }
+  finally { btn.textContent='Generate .conf'; btn.disabled=false; }
+}
+
+function wgDownload() {
+  if (!_wgConf) return;
+  const b = new Blob([_wgConf], { type:'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b);
+  a.download = `${_wgClientName || 'wireguard'}.conf`;
+  a.click();
+}
+
+function wgCopy() {
+  if (!_wgConf) return;
+  navigator.clipboard.writeText(_wgConf).then(()=>toast('Copied!'));
+}
+
+async function wgLoadClients() {
+  const el = document.getElementById('wg-clients');
+  el.innerHTML = '<div style="color:var(--t3);font-size:12px">Loading...</div>';
+  try {
+    const d = await fetchApi('/api/vpn/wg/clients');
+    const clients = d.clients || [];
+    if (!clients.length) {
+      el.innerHTML = '<div style="color:var(--t3);font-size:12px;padding:4px 0">No clients yet.</div>';
+      return;
+    }
+    el.innerHTML = clients.map(c =>
+      `<div class="client-item"><span class="cn">${esc(c.name)} <span style="color:var(--t3)">(${esc(c.ip || '')})</span></span><button class="btn btn-sm" onclick="wgShow('${esc(c.name)}')">Show</button><button class="btn btn-sm" onclick="wgDownloadClient('${esc(c.name)}')">&#11015; .conf</button><button class="btn btn-danger btn-sm" onclick="wgDelete('${esc(c.name)}')">&#10005; Delete</button></div>`
+    ).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="color:var(--rd);font-size:12px">'+esc(e.message)+'</div>';
+  }
+}
+
+async function wgShow(name) {
+  try {
+    const confResp = await fetch('/api/vpn/wg/client/' + encodeURIComponent(name) + '/conf', { headers: { 'x-vpn-token': _tok } });
+    if (!confResp.ok) throw new Error('Cannot load WG config');
+    const conf = await confResp.text();
+    const qrResp = await fetch('/api/vpn/wg/client/' + encodeURIComponent(name) + '/qr', { headers: { 'x-vpn-token': _tok } });
+    if (!qrResp.ok) throw new Error('Cannot load WG QR');
+    const qrBlob = await qrResp.blob();
+    _wgConf = conf;
+    _wgClientName = name;
+    _wgQr = URL.createObjectURL(qrBlob);
+    document.getElementById('wg-conf').textContent = conf;
+    document.getElementById('wg-qr').src = _wgQr;
+    document.getElementById('wg-result').style.display = 'block';
+  } catch (e) { toast(e.message,'err'); }
+}
+
+async function wgDownloadClient(name) {
+  try {
+    const resp = await fetch('/api/vpn/wg/client/' + encodeURIComponent(name) + '/conf', { headers: { 'x-vpn-token': _tok } });
+    if (!resp.ok) throw new Error('Cannot download WG config');
+    const txt = await resp.text();
+    const b = new Blob([txt], { type:'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `${name}.conf`;
+    a.click();
+  } catch (e) { toast(e.message,'err'); }
+}
+
+async function wgDelete(name) {
+  if (!confirm('Delete WireGuard client "'+name+'"?')) return;
+  try {
+    await fetchApi('/api/vpn/wg/client/' + encodeURIComponent(name), { method:'DELETE' });
+    toast('WireGuard client deleted');
+    wgLoadClients();
+  } catch (e) { toast(e.message,'err'); }
+}
+
 async function l2Load() {
   document.getElementById('l2tp-loading').style.display='block'; document.getElementById('l2tp-loading').textContent='Loading credentials...'; document.getElementById('l2tp-body').style.display='none';
   try { let d=await fetchApi('/api/gateways/'+encodeURIComponent(_vmGw)+'/l2tp'); if(!d.users||!d.users.length){await fetchApi('/api/gateways/'+encodeURIComponent(_vmGw)+'/l2tp/reset',{method:'POST',body:JSON.stringify({username:_vmGw})}); d=await fetchApi('/api/gateways/'+encodeURIComponent(_vmGw)+'/l2tp');} _l2Data=d; l2Render(d); } catch(e) { document.getElementById('l2tp-loading').textContent='Error: '+e.message; }

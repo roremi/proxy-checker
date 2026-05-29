@@ -610,6 +610,19 @@ function wgDeleteClient(name) {
   return true;
 }
 
+function wgBuildConf(c) {
+  const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
+  return `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/24\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+}
+
+function wgBuildQrDataUrl(conf) {
+  const qr = execSync(`printf '%s' "${conf.replace(/'/g,"'\\''").replace(/"/g,'\\"')}" | qrencode -t png -o -`, {
+    shell: '/bin/bash',
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  return `data:image/png;base64,${qr.toString('base64')}`;
+}
+
 function ssGetConfig() {
   try { return JSON.parse(fs.readFileSync(SS_CONF, 'utf8')); } catch(_) { return null; }
 }
@@ -803,20 +816,30 @@ app.get('/api/key/me', requireApiKey(), (req, res) => {
   // exist (admin may have deleted a gateway directly, leaving stale refs).
   const allGws = gwLoad();
   const liveClients = (k.vpn_clients || []).filter(c => c && allGws[c.gateway]);
+  const liveWgClients = (k.wg_clients || []).filter(c => c && allGws[c.gateway]);
   const liveOwned  = (k.my_gateways || []).filter(n => allGws[n]);
   // Persist cleanup so subsequent calls (and admin views) stay consistent.
-  if (liveClients.length !== (k.vpn_clients || []).length || liveOwned.length !== (k.my_gateways || []).length) {
+  if (
+    liveClients.length !== (k.vpn_clients || []).length ||
+    liveWgClients.length !== (k.wg_clients || []).length ||
+    liveOwned.length !== (k.my_gateways || []).length
+  ) {
     try {
       const ks = keysLoad();
       if (ks[k.id]) {
         ks[k.id].vpn_clients = liveClients;
+        ks[k.id].wg_clients = liveWgClients;
         ks[k.id].my_gateways = liveOwned;
         keysSave(ks);
       }
     } catch (_) {}
   }
   // Union: gateways the key OWNS plus any extras admin granted via allowed_gateways.
-  const ownedSet = new Set([...liveOwned, ...liveClients.map(c => c.gateway)]);
+  const ownedSet = new Set([
+    ...liveOwned,
+    ...liveClients.map(c => c.gateway),
+    ...liveWgClients.map(c => c.gateway),
+  ]);
   const accessibleSet = new Set(ownedSet);
   if (Array.isArray(k.allowed_gateways)) {
     for (const n of k.allowed_gateways) if (allGws[n]) accessibleSet.add(n);
@@ -836,6 +859,7 @@ app.get('/api/key/me', requireApiKey(), (req, res) => {
     my_gateways: [...ownedSet],
     accessible_gateways: [...accessibleSet],
     vpn_clients: liveClients,
+    wg_clients: liveWgClients,
   });
 });
 
@@ -1088,10 +1112,98 @@ app.get('/api/customer/gateway/:name/clients', requireApiKey(), (req, res) => {
   res.json({ clients: myClients.map(c => ({ client_name: c.client_name, cert_name: c.cert_name, created_at: c.created_at })) });
 });
 
+// GET /api/customer/gateway/:name/wg-clients — list WireGuard clients this key owns on this gateway
+app.get('/api/customer/gateway/:name/wg-clients', requireApiKey(), (req, res) => {
+  const ctx = _ownsOrFail(req, res); if (!ctx) return;
+  const k = req.apiKey;
+  const myWg = (k.wg_clients || []).filter(c => c.gateway === ctx.name);
+  res.json({
+    clients: myWg.map(c => ({
+      gateway: c.gateway,
+      client_name: c.client_name,
+      wg_name: c.wg_name,
+      ip: c.ip || '',
+      created_at: c.created_at,
+    })),
+  });
+});
+
+// POST /api/customer/gateway/:name/wg-client — generate WireGuard config and track ownership
+app.post('/api/customer/gateway/:name/wg-client', requireApiKey(), (req, res) => {
+  const k = req.apiKey;
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (!keyCanAccessGateway(k, name))
+    return res.status(403).json({ error: 'You do not have access to this gateway' });
+  const clientName = (req.body.client_name || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || 'default';
+  const gateways = gwLoad();
+  if (!gateways[name]) return res.status(404).json({ error: 'Gateway not found' });
+
+  const keyPrefix = k.id.replace(/-/g, '').slice(0, 8);
+  const wgName = `${name}_${keyPrefix}_${clientName}`.slice(0, 48);
+  const existing = (k.wg_clients || []).find(c => c.gateway === name && c.client_name === clientName);
+  if (existing) {
+    const all = wgLoadClients();
+    const wc = all[existing.wg_name];
+    if (!wc) return res.status(404).json({ error: 'Existing WireGuard record not found on server. Please recreate.' });
+    const conf = wgBuildConf(wc);
+    let qr = '';
+    try { qr = wgBuildQrDataUrl(conf); } catch(_) {}
+    return res.json({ ok: true, gateway: name, name: clientName, wg_name: existing.wg_name, ip: wc.ip, conf, qr, existing: true });
+  }
+
+  try {
+    const result = wgCreateClient(wgName);
+    const keys = keysLoad();
+    if (!keys[k.id].wg_clients) keys[k.id].wg_clients = [];
+    keys[k.id].wg_clients.push({
+      gateway: name,
+      client_name: clientName,
+      wg_name: wgName,
+      ip: result.ip,
+      created_at: new Date().toISOString(),
+    });
+    keysSave(keys);
+    let qr = '';
+    try { qr = wgBuildQrDataUrl(result.conf); } catch(_) {}
+    res.json({ ok: true, gateway: name, name: clientName, wg_name: wgName, ip: result.ip, conf: result.conf, qr });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/customer/wg/client/:wgName — get owned WireGuard client config (+ QR)
+app.get('/api/customer/wg/client/:wgName', requireApiKey(), (req, res) => {
+  const k = req.apiKey;
+  const wgName = req.params.wgName.replace(/[^a-zA-Z0-9_-]/g, '');
+  const owned = (k.wg_clients || []).find(c => c.wg_name === wgName);
+  if (!owned) return res.status(404).json({ error: 'Client not found or not owned by you' });
+  const all = wgLoadClients();
+  const wc = all[wgName];
+  if (!wc) return res.status(404).json({ error: 'WireGuard client not found on server' });
+  try {
+    const conf = wgBuildConf(wc);
+    let qr = '';
+    try { qr = wgBuildQrDataUrl(conf); } catch(_) {}
+    res.json({ ok: true, gateway: owned.gateway, client_name: owned.client_name, wg_name: wgName, ip: wc.ip, conf, qr });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE /api/customer/wg/client/:wgName — revoke owned WireGuard client
+app.delete('/api/customer/wg/client/:wgName', requireApiKey(), (req, res) => {
+  const k = req.apiKey;
+  const wgName = req.params.wgName.replace(/[^a-zA-Z0-9_-]/g, '');
+  const myWg = k.wg_clients || [];
+  const idx = myWg.findIndex(c => c.wg_name === wgName);
+  if (idx === -1) return res.status(404).json({ error: 'Client not found or not owned by you' });
+  try { wgDeleteClient(wgName); } catch (_) {}
+  const keys = keysLoad();
+  keys[k.id].wg_clients = myWg.filter((_, i) => i !== idx);
+  keysSave(keys);
+  res.json({ ok: true });
+});
+
 // POST /api/customer/proxy — create a new VPN gateway from a proxy URL (any valid key)
 app.post('/api/customer/proxy', requireApiKey(), async (req, res) => {
   const k = req.apiKey;
-  const { proxy_url } = req.body;
+  const { proxy_url, allow_http_proxy } = req.body;
   if (!proxy_url) return res.status(400).json({ error: 'proxy_url required' });
   // Auto-generate unique gateway name from key prefix + index
   const keys = keysLoad();
@@ -1114,7 +1226,7 @@ app.post('/api/customer/proxy', requireApiKey(), async (req, res) => {
     const r = await fetch(`http://127.0.0.1:${PORT}/api/gateways`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-vpn-token': token },
-      body: JSON.stringify({ name: finalName, proxy_url }),
+      body: JSON.stringify({ name: finalName, proxy_url, allow_http_proxy }),
     });
     const d = await r.json();
     if (!r.ok) return res.status(r.status).json(d);
@@ -1122,7 +1234,7 @@ app.post('/api/customer/proxy', requireApiKey(), async (req, res) => {
     if (!keys[k.id].my_gateways) keys[k.id].my_gateways = [];
     keys[k.id].my_gateways.push(finalName);
     keysSave(keys);
-    // Auto-generate OpenVPN client cert for this key on the new gateway
+    // Auto-generate OpenVPN + WireGuard default clients for this key on the new gateway
     const gateways2 = gwLoad();
     const gw2 = gateways2[finalName];
     if (gw2) {
@@ -1134,8 +1246,35 @@ app.post('/api/customer/proxy', requireApiKey(), async (req, res) => {
         const keys2 = keysLoad();
         if (!keys2[k.id].vpn_clients) keys2[k.id].vpn_clients = [];
         keys2[k.id].vpn_clients.push({ gateway: finalName, client_name: 'default', cert_name: certName, created_at: new Date().toISOString() });
+        let wgConf = '';
+        let wgName = '';
+        let wgIp = '';
+        try {
+          wgName = `${finalName}_${keyPrefix}_default_wg`.slice(0, 48);
+          const wgCreated = wgCreateClient(wgName);
+          wgConf = wgCreated.conf || '';
+          wgIp = wgCreated.ip || '';
+          if (!keys2[k.id].wg_clients) keys2[k.id].wg_clients = [];
+          keys2[k.id].wg_clients.push({
+            gateway: finalName,
+            client_name: 'default',
+            wg_name: wgName,
+            ip: wgIp,
+            created_at: new Date().toISOString(),
+          });
+        } catch (_) {}
         keysSave(keys2);
-        return res.status(201).json({ ok: true, gateway: finalName, vpn_port: d.vpn_port, exit_ip: d.exit_ip, ovpn, cert_name: certName });
+        return res.status(201).json({
+          ok: true,
+          gateway: finalName,
+          vpn_port: d.vpn_port,
+          exit_ip: d.exit_ip,
+          ovpn,
+          cert_name: certName,
+          wg_conf: wgConf || undefined,
+          wg_name: wgName || undefined,
+          wg_ip: wgIp || undefined,
+        });
       } catch(e) {
         return res.status(201).json({ ok: true, gateway: finalName, vpn_port: d.vpn_port, exit_ip: d.exit_ip, ovpn_error: e.message });
       }
@@ -1161,9 +1300,16 @@ app.delete('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
     if (!r.ok) return res.status(r.status).json(d);
     const keys = keysLoad();
     keys[k.id].my_gateways = myGws.filter(n => n !== name);
-    // Also remove vpn_clients for this gateway
+    // Also remove vpn_clients / wg_clients for this gateway
     if (keys[k.id].vpn_clients) {
       keys[k.id].vpn_clients = keys[k.id].vpn_clients.filter(c => c.gateway !== name);
+    }
+    if (keys[k.id].wg_clients) {
+      const toDelete = keys[k.id].wg_clients.filter(c => c.gateway === name);
+      for (const c of toDelete) {
+        try { wgDeleteClient(c.wg_name); } catch(_) {}
+      }
+      keys[k.id].wg_clients = keys[k.id].wg_clients.filter(c => c.gateway !== name);
     }
     keysSave(keys);
     res.json({ ok: true });
@@ -1176,7 +1322,7 @@ app.put('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
   const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
   const myGws = k.my_gateways || [];
   if (!myGws.includes(name)) return res.status(403).json({ error: 'Not your gateway' });
-  const { proxy_url } = req.body || {};
+  const { proxy_url, allow_http_proxy } = req.body || {};
   if (!proxy_url) return res.status(400).json({ error: 'proxy_url required' });
   try {
     const settings = settingsLoad();
@@ -1184,7 +1330,7 @@ app.put('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
     const r = await fetch(`http://127.0.0.1:${PORT}/api/gateways/${encodeURIComponent(name)}/proxy`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'x-vpn-token': token },
-      body: JSON.stringify({ proxy_url }),
+      body: JSON.stringify({ proxy_url, allow_http_proxy }),
     });
     const d = await r.json().catch(() => ({}));
     res.status(r.status).json(d);
@@ -1548,6 +1694,34 @@ async function gwTestProxy(proxyUrl) {
   return r.exitIp;
 }
 
+function parseBoolOpt(v) {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v === 1;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    return s === '1' || s === 'true' || s === 'yes' || s === 'on';
+  }
+  return false;
+}
+
+function ensureGatewayUdpBlocked(vpnSubnet) {
+  if (!vpnSubnet) return;
+  const rule = `-s ${vpnSubnet} -p udp -j REJECT --reject-with icmp-port-unreachable`;
+  try {
+    execSync(`iptables -C FORWARD ${rule} 2>/dev/null || iptables -I FORWARD 1 ${rule}`, { shell:'/bin/bash', stdio:'ignore' });
+    execSync(`iptables-save > /etc/iptables/rules.v4 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' });
+  } catch(_) {}
+}
+
+function removeGatewayUdpBlock(vpnSubnet) {
+  if (!vpnSubnet) return;
+  const rule = `-s ${vpnSubnet} -p udp -j REJECT --reject-with icmp-port-unreachable`;
+  try {
+    execSync(`iptables -D FORWARD ${rule} 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' });
+    execSync(`iptables-save > /etc/iptables/rules.v4 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' });
+  } catch(_) {}
+}
+
 // GET all gateways
 app.get('/api/gateways', requireVpnToken, (req, res) => {
   const gateways = gwLoad();
@@ -1573,7 +1747,8 @@ app.get('/api/gateways', requireVpnToken, (req, res) => {
 // POST create gateway
 app.post('/api/gateways', requireVpnToken, async (req, res) => {
   try {
-    const { name, proxy_url, vpn_port } = req.body;
+    const { name, proxy_url, vpn_port, allow_http_proxy } = req.body;
+    const allowHttpProxy = parseBoolOpt(allow_http_proxy);
     if (!name || !proxy_url) return res.status(400).json({ error: 'Missing params' });
     if (!/^[a-zA-Z0-9_-]{1,24}$/.test(name)) return res.status(400).json({ error: 'Invalid name' });
 
@@ -1601,11 +1776,14 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
     const normalizedProxy = detected.url;          // canonical URL stored in tun2socks.env
     const proxyScheme = detected.scheme;           // 'socks5' or 'http'
 
-    // tun2socks only supports SOCKS5 / SS / HTTP CONNECT — both are fine.
-    // (HTTP CONNECT does NOT carry UDP, so DNS/UDP from VPN clients will be blocked by the LEAK chain.)
-    if (proxyScheme === 'http') {
-      console.warn(`[gw ${name}] HTTP proxy detected — UDP will not work, only TCP.`);
+    // SOCKS5 is preferred. HTTP/HTTPS is only allowed with explicit opt-in,
+    // then the gateway is forced into TCP-only mode by blocking forwarded UDP.
+    if (proxyScheme !== 'socks5' && !allowHttpProxy) {
+      return res.status(400).json({
+        error: 'HTTP/HTTPS proxy requires allow_http_proxy=true (gateway will run in TCP-only mode with UDP/WebRTC blocked).'
+      });
     }
+    const tcpOnlyMode = proxyScheme !== 'socks5';
 
     // 3. Allocate resources
     const { tableId, vpnIdx, t2sIdx } = gwAllocResources(gateways);
@@ -1647,7 +1825,7 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
 
     // 5. routing env for up.sh/down.sh (now also carries MITM_UID + MITM_PORT)
     fs.writeFileSync(path.join(gwPath, 'routing.env'),
-      `TABLE_ID=${tableId}\nTUN_DEV=${t2sDev}\nVPN_SUBNET=${vpnSubnet}\nDNSPROXY_UID=${gwUid}\nFWMARK=${fwmark}\nMITM_UID=${mitmUid}\nMITM_PORT=${mitmPort}\n`);
+      `TABLE_ID=${tableId}\nTUN_DEV=${t2sDev}\nVPN_SUBNET=${vpnSubnet}\nDNSPROXY_UID=${gwUid}\nFWMARK=${fwmark}\nMITM_UID=${mitmUid}\nMITM_PORT=${mitmPort}\nTCP_ONLY_MODE=${tcpOnlyMode ? 1 : 0}\n`);
 
     // 5a. mitm.env consumed by mitmproxy@<name>.service + capture-addon.py
     let captureToken = '';
@@ -1724,6 +1902,7 @@ down "/etc/openvpn/gateways/down.sh ${name}"
     // 8. Save state
     gateways[name] = {
       name, proxy_url: normalizedProxy, proxy_scheme: proxyScheme,
+      tcp_only_mode: tcpOnlyMode,
       vpn_port: port, exit_ip: exitIp,
       country: countryCode, dns_upstream1: dnsCfg.u1, dns_fallback: dnsCfg.fallback,
       table_id: tableId, vpn_subnet_index: vpnIdx, t2s_subnet_index: t2sIdx,
@@ -1743,6 +1922,8 @@ down "/etc/openvpn/gateways/down.sh ${name}"
     try { execSync(`systemctl enable --now dnsmasq-gw@${name}`); } catch(e) { console.warn('[gw dnsmasq-gw]', e.message); }
     // watchdog timer: auto-restart tun2socks if proxy becomes unresponsive
     try { execSync(`systemctl enable --now tun2socks-watchdog@${name}.timer`); } catch(e) { console.warn('[gw watchdog]', e.message); }
+    if (tcpOnlyMode) ensureGatewayUdpBlocked(vpnSubnet);
+    else removeGatewayUdpBlock(vpnSubnet);
     // Symlink openvpn server conf so systemd finds it
     const ovSymlink = `/etc/openvpn/server/${name}.conf`;
     if (!fs.existsSync(ovSymlink)) fs.symlinkSync(path.join(gwPath, `${name}.conf`), ovSymlink);
@@ -1819,6 +2000,7 @@ app.delete('/api/gateways/:name', requireVpnToken, (req, res) => {
   if (gw.vpn_subnet && gw.mitm_port) {
     try { execSync(`iptables -t nat -D PREROUTING -s ${gw.vpn_subnet} -p tcp -m multiport --dports 80,443 -j REDIRECT --to-port ${gw.mitm_port} 2>/dev/null || true`, { shell:'/bin/bash', stdio:'ignore' }); } catch(_){}
   }
+  if (gw.vpn_subnet) removeGatewayUdpBlock(gw.vpn_subnet);
 
   // 3. Remove per-gateway dnsproxy + mitm OS users
   try { execSync(`userdel dnsproxy-${name} 2>/dev/null || true`, { shell:'/bin/bash' }); } catch(_){}
@@ -2108,12 +2290,28 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
   const gateways = gwLoad();
   const gw = gateways[name];
   if (!gw) return res.status(404).json({ error: 'Not found' });
-  const { proxy_url } = req.body;
+  const { proxy_url, allow_http_proxy } = req.body || {};
+  const allowHttpProxy = parseBoolOpt(allow_http_proxy);
   if (!proxy_url) return res.status(400).json({ error: 'Missing proxy_url' });
   let detected;
   try { detected = await detectAndTestProxy(proxy_url); }
   catch(e) { return res.status(400).json({ error: 'Proxy test failed: ' + e.message }); }
+  if (detected.scheme !== 'socks5' && !allowHttpProxy) {
+    return res.status(400).json({
+      error: 'HTTP/HTTPS proxy requires allow_http_proxy=true (gateway will run in TCP-only mode with UDP/WebRTC blocked).'
+    });
+  }
+  const tcpOnlyMode = detected.scheme !== 'socks5';
+
   const gwPath = path.join(GW_DIR, name);
+  const routingEnvPath = path.join(gwPath, 'routing.env');
+  try {
+    let routingEnv = fs.readFileSync(routingEnvPath, 'utf8');
+    routingEnv = routingEnv.replace(/^TCP_ONLY_MODE=.*/m, `TCP_ONLY_MODE=${tcpOnlyMode ? 1 : 0}`);
+    if (!/^TCP_ONLY_MODE=/m.test(routingEnv)) routingEnv += `\nTCP_ONLY_MODE=${tcpOnlyMode ? 1 : 0}\n`;
+    fs.writeFileSync(routingEnvPath, routingEnv);
+  } catch(_) {}
+
   // Update tun2socks.env with new proxy URL
   const t2sEnvPath = path.join(gwPath, 'tun2socks.env');
   let t2sEnv = '';
@@ -2124,8 +2322,13 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
   // Update gateways.json
   gateways[name].proxy_url    = detected.url;
   gateways[name].proxy_scheme = detected.scheme;
+  gateways[name].tcp_only_mode = tcpOnlyMode;
   gateways[name].exit_ip      = detected.exitIp;
   gateways[name].last_tested  = new Date().toISOString();
+  if (gw.vpn_subnet) {
+    if (tcpOnlyMode) ensureGatewayUdpBlocked(gw.vpn_subnet);
+    else removeGatewayUdpBlock(gw.vpn_subnet);
+  }
   gwSave(gateways);
   // Restart tun2socks to pick up new proxy
   try {
@@ -2139,7 +2342,7 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
       }, 3000);
     }
   } catch(e) { console.warn('[proxy update] tun2socks restart failed:', e.message); }
-  res.json({ ok: true, exit_ip: detected.exitIp, proxy_scheme: detected.scheme });
+  res.json({ ok: true, exit_ip: detected.exitIp, proxy_scheme: detected.scheme, tcp_only_mode: tcpOnlyMode });
 });
 
 
