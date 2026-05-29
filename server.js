@@ -554,21 +554,60 @@ function wgLoadClients() {
 }
 function wgSaveClients(data) { fs.writeFileSync(WG_DATA, JSON.stringify(data, null, 2)); }
 
-function wgNextIp(clients) {
-  const used = new Set(Object.values(clients).map(c => c.ip));
-  for (let i = 2; i <= 254; i++) {
-    const ip = `10.8.0.${i}`;
-    if (!used.has(ip)) return ip;
-  }
-  throw new Error('No IPs available');
+function wgSubnetPrefix(subnet) {
+  const m = String(subnet || '').trim().match(/^(\d+)\.(\d+)\.(\d+)\.\d+\/\d+$/);
+  if (!m) return '10.8.0';
+  return `${m[1]}.${m[2]}.${m[3]}`;
 }
 
-function wgCreateClient(name) {
+function wgSubnetMask(subnet) {
+  const m = String(subnet || '').trim().match(/^\d+\.\d+\.\d+\.\d+\/(\d+)$/);
+  const n = m ? parseInt(m[1], 10) : 24;
+  return Number.isFinite(n) ? n : 24;
+}
+
+function wgGatewaySubnetFromIndex(vpnSubnetIndex) {
+  const idx = Number(vpnSubnetIndex);
+  if (!Number.isFinite(idx) || idx < 0 || idx > 104) return '';
+  return `10.${150 + idx}.0.0/24`;
+}
+
+function wgInferGatewayName(clientName, gateways) {
+  const safeName = String(clientName || '').trim();
+  if (!safeName || !gateways || typeof gateways !== 'object') return '';
+  return Object.keys(gateways)
+    .sort((a, b) => b.length - a.length)
+    .find(gatewayName => safeName === gatewayName || safeName.startsWith(`${gatewayName}_`)) || '';
+}
+
+function wgNextIp(clients, subnet = '10.8.0.0/24') {
+  const prefix = wgSubnetPrefix(subnet);
+  const used = new Set(
+    Object.values(clients)
+      .filter(c => (c.subnet || '10.8.0.0/24') === subnet)
+      .map(c => c.ip)
+  );
+  for (let i = 2; i <= 254; i++) {
+    const ip = `${prefix}.${i}`;
+    if (!used.has(ip)) return ip;
+  }
+  throw new Error(`No IPs available in subnet ${subnet}`);
+}
+
+function wgCreateClient(name, gatewayName = '') {
   const privKey = execSync('wg genkey').toString().trim();
   const pubKey  = execSync(`echo "${privKey}" | wg pubkey`).toString().trim();
   const psk     = execSync('wg genpsk').toString().trim();
   const clients = wgLoadClients();
-  const ip      = wgNextIp(clients);
+  let subnet = '10.8.0.0/24';
+  const gateways = gwLoad();
+  const resolvedGatewayName = gatewayName || wgInferGatewayName(name, gateways);
+  if (resolvedGatewayName) {
+    const gw = gateways[resolvedGatewayName];
+    if (!gw) throw new Error('Gateway not found for WireGuard client');
+    subnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || subnet;
+  }
+  const ip      = wgNextIp(clients, subnet);
   const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
 
   // Add peer to server config
@@ -576,13 +615,23 @@ function wgCreateClient(name) {
   fs.appendFileSync(WG_CONF, peer);
   execSync(`wg addconf wg0 <(printf '[Peer]\\nPublicKey = ${pubKey}\\nPresharedKey = ${psk}\\nAllowedIPs = ${ip}/32\\n')`, { shell: '/bin/bash' });
 
-  clients[name] = { name, ip, pubKey, privKey, psk, createdAt: new Date().toISOString() };
+  clients[name] = {
+    name,
+    gateway: resolvedGatewayName || '',
+    subnet,
+    ip,
+    pubKey,
+    privKey,
+    psk,
+    createdAt: new Date().toISOString(),
+  };
   wgSaveClients(clients);
 
   // Build client .conf text
+  const mask = wgSubnetMask(subnet);
   const conf = `[Interface]
 PrivateKey = ${privKey}
-Address = ${ip}/24
+Address = ${ip}/${mask}
 DNS = 1.1.1.1, 8.8.8.8
 
 [Peer]
@@ -592,7 +641,7 @@ Endpoint = ${SERVER_IP}:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25
 `;
-  return { name, ip, conf };
+  return { name, ip, subnet, conf };
 }
 
 function wgDeleteClient(name) {
@@ -612,7 +661,8 @@ function wgDeleteClient(name) {
 
 function wgBuildConf(c) {
   const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
-  return `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/24\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+  const mask = wgSubnetMask(c.subnet || '10.8.0.0/24');
+  return `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/${mask}\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
 }
 
 function wgBuildQrDataUrl(conf) {
@@ -1083,6 +1133,7 @@ app.post('/api/customer/gateway/:name/:action(start|stop|restart)', requireApiKe
       execSync(`systemctl stop openvpn-server@${ctx.name}`);
       execSync(`systemctl stop tun2socks@${ctx.name}`);
     } else {
+      gwSyncRoutingEnv(ctx.name, ctx.gw);
       execSync(`systemctl ${action} tun2socks@${ctx.name}`);
       execSync(`systemctl ${action} openvpn-server@${ctx.name}`);
     }
@@ -1136,7 +1187,9 @@ app.post('/api/customer/gateway/:name/wg-client', requireApiKey(), (req, res) =>
     return res.status(403).json({ error: 'You do not have access to this gateway' });
   const clientName = (req.body.client_name || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || 'default';
   const gateways = gwLoad();
-  if (!gateways[name]) return res.status(404).json({ error: 'Gateway not found' });
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Gateway not found' });
+  const expectedSubnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || '10.8.0.0/24';
 
   const keyPrefix = k.id.replace(/-/g, '').slice(0, 8);
   const wgName = `${name}_${keyPrefix}_${clientName}`.slice(0, 48);
@@ -1144,15 +1197,24 @@ app.post('/api/customer/gateway/:name/wg-client', requireApiKey(), (req, res) =>
   if (existing) {
     const all = wgLoadClients();
     const wc = all[existing.wg_name];
-    if (!wc) return res.status(404).json({ error: 'Existing WireGuard record not found on server. Please recreate.' });
-    const conf = wgBuildConf(wc);
-    let qr = '';
-    try { qr = wgBuildQrDataUrl(conf); } catch(_) {}
-    return res.json({ ok: true, gateway: name, name: clientName, wg_name: existing.wg_name, ip: wc.ip, conf, qr, existing: true });
+    if (wc && (wc.subnet || '10.8.0.0/24') === expectedSubnet) {
+      const conf = wgBuildConf(wc);
+      let qr = '';
+      try { qr = wgBuildQrDataUrl(conf); } catch(_) {}
+      return res.json({ ok: true, gateway: name, name: clientName, wg_name: existing.wg_name, ip: wc.ip, conf, qr, existing: true });
+    }
+
+    // Existing record is stale (missing or on wrong subnet) => recreate for this gateway.
+    try { if (wc) wgDeleteClient(existing.wg_name); } catch(_) {}
+    const keysFix = keysLoad();
+    if (keysFix[k.id]?.wg_clients) {
+      keysFix[k.id].wg_clients = keysFix[k.id].wg_clients.filter(c => c.wg_name !== existing.wg_name);
+      keysSave(keysFix);
+    }
   }
 
   try {
-    const result = wgCreateClient(wgName);
+    const result = wgCreateClient(wgName, name);
     const keys = keysLoad();
     if (!keys[k.id].wg_clients) keys[k.id].wg_clients = [];
     keys[k.id].wg_clients.push({
@@ -1251,7 +1313,7 @@ app.post('/api/customer/proxy', requireApiKey(), async (req, res) => {
         let wgIp = '';
         try {
           wgName = `${finalName}_${keyPrefix}_default_wg`.slice(0, 48);
-          const wgCreated = wgCreateClient(wgName);
+          const wgCreated = wgCreateClient(wgName, finalName);
           wgConf = wgCreated.conf || '';
           wgIp = wgCreated.ip || '';
           if (!keys2[k.id].wg_clients) keys2[k.id].wg_clients = [];
@@ -1529,7 +1591,16 @@ app.post('/api/admin/settings', requireVpnToken, (req, res) => {
 // WireGuard: list clients
 app.get('/api/vpn/wg/clients', requireVpnToken, (req, res) => {
   const clients = wgLoadClients();
-  res.json({ count: Object.keys(clients).length, clients: Object.values(clients).map(c => ({ name: c.name, ip: c.ip, createdAt: c.createdAt })) });
+  res.json({
+    count: Object.keys(clients).length,
+    clients: Object.values(clients).map(c => ({
+      name: c.name,
+      ip: c.ip,
+      subnet: c.subnet || '10.8.0.0/24',
+      gateway: c.gateway || '',
+      createdAt: c.createdAt,
+    })),
+  });
 });
 
 // WireGuard: create client
@@ -1559,8 +1630,7 @@ app.get('/api/vpn/wg/client/:name/conf', requireVpnToken, (req, res) => {
   const clients = wgLoadClients();
   const c = clients[req.params.name];
   if (!c) return res.status(404).end();
-  const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
-  const conf = `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/24\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+  const conf = wgBuildConf(c);
   res.setHeader('Content-Type', 'text/plain');
   res.setHeader('Content-Disposition', `attachment; filename="${c.name}.conf"`);
   res.send(conf);
@@ -1571,8 +1641,7 @@ app.get('/api/vpn/wg/client/:name/qr', requireVpnToken, (req, res) => {
   const clients = wgLoadClients();
   const c = clients[req.params.name];
   if (!c) return res.status(404).end();
-  const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
-  const conf = `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/24\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+  const conf = wgBuildConf(c);
   try {
     const qr = execSync(`printf '%s' "${conf.replace(/'/g,"'\\''").replace(/"/g,'\\"')}" | qrencode -t png -o -`, { shell: '/bin/bash', maxBuffer: 2*1024*1024 });
     res.setHeader('Content-Type', 'image/png');
@@ -1649,9 +1718,44 @@ async function getCountryCode(ip) {
 fs.mkdirSync(GW_DIR, { recursive: true });
 
 function gwLoad() {
-  try { return JSON.parse(fs.readFileSync(GW_DATA, 'utf8')); } catch(_) { return {}; }
+  try {
+    const data = JSON.parse(fs.readFileSync(GW_DATA, 'utf8'));
+    let changed = false;
+    for (const g of Object.values(data)) {
+      if (!g || g.wg_subnet) continue;
+      const s = wgGatewaySubnetFromIndex(g.vpn_subnet_index);
+      if (s) { g.wg_subnet = s; changed = true; }
+    }
+    if (changed) gwSave(data);
+    return data;
+  } catch(_) { return {}; }
 }
 function gwSave(data) { fs.writeFileSync(GW_DATA, JSON.stringify(data, null, 2)); }
+
+function gwSyncRoutingEnv(name, gw) {
+  try {
+    const gwPath = path.join(GW_DIR, name);
+    const envPath = path.join(gwPath, 'routing.env');
+    if (!fs.existsSync(envPath)) return;
+    let env = fs.readFileSync(envPath, 'utf8');
+    const wgSubnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || '';
+    const setLine = (key, val) => {
+      if (val === undefined || val === null || val === '') return;
+      env = env.replace(new RegExp(`^${key}=.*`, 'm'), `${key}=${val}`);
+      if (!new RegExp(`^${key}=`, 'm').test(env)) env += `${key}=${val}\n`;
+    };
+    setLine('TABLE_ID', gw.table_id);
+    setLine('TUN_DEV', gw.t2s_dev);
+    setLine('VPN_SUBNET', gw.vpn_subnet);
+    setLine('WG_SUBNET', wgSubnet);
+    setLine('DNSPROXY_UID', gw.gw_uid);
+    setLine('FWMARK', gw.fwmark);
+    setLine('MITM_UID', gw.mitm_uid);
+    setLine('MITM_PORT', gw.mitm_port);
+    setLine('TCP_ONLY_MODE', gw.tcp_only_mode ? 1 : 0);
+    fs.writeFileSync(envPath, env);
+  } catch (_) {}
+}
 
 // Allocate unique resources per gateway
 function gwAllocResources(gateways) {
@@ -1823,9 +1927,11 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
     const mitmUid  = parseInt(execSync(`id -u ${mitmUser}`).toString().trim(), 10);
     const mitmPort = 18080 + vpnIdx;
 
+    const wgSubnet = wgGatewaySubnetFromIndex(vpnIdx);
+
     // 5. routing env for up.sh/down.sh (now also carries MITM_UID + MITM_PORT)
     fs.writeFileSync(path.join(gwPath, 'routing.env'),
-      `TABLE_ID=${tableId}\nTUN_DEV=${t2sDev}\nVPN_SUBNET=${vpnSubnet}\nDNSPROXY_UID=${gwUid}\nFWMARK=${fwmark}\nMITM_UID=${mitmUid}\nMITM_PORT=${mitmPort}\nTCP_ONLY_MODE=${tcpOnlyMode ? 1 : 0}\n`);
+      `TABLE_ID=${tableId}\nTUN_DEV=${t2sDev}\nVPN_SUBNET=${vpnSubnet}\nWG_SUBNET=${wgSubnet}\nDNSPROXY_UID=${gwUid}\nFWMARK=${fwmark}\nMITM_UID=${mitmUid}\nMITM_PORT=${mitmPort}\nTCP_ONLY_MODE=${tcpOnlyMode ? 1 : 0}\n`);
 
     // 5a. mitm.env consumed by mitmproxy@<name>.service + capture-addon.py
     let captureToken = '';
@@ -1906,7 +2012,7 @@ down "/etc/openvpn/gateways/down.sh ${name}"
       vpn_port: port, exit_ip: exitIp,
       country: countryCode, dns_upstream1: dnsCfg.u1, dns_fallback: dnsCfg.fallback,
       table_id: tableId, vpn_subnet_index: vpnIdx, t2s_subnet_index: t2sIdx,
-      vpn_subnet: vpnSubnet, t2s_dev: t2sDev,
+      vpn_subnet: vpnSubnet, wg_subnet: wgSubnet, t2s_dev: t2sDev,
       gw_user: gwUser, gw_uid: gwUid, fwmark,
       mitm_user: mitmUser, mitm_uid: mitmUid, mitm_port: mitmPort, mitm_enabled: false,
       client_count: 0, created_at: new Date().toISOString(),
@@ -2104,11 +2210,15 @@ app.post('/api/gateways/:name/:action(start|stop|restart)', requireVpnToken, (re
   const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
   const action = req.params.action;
   if (!['start','stop','restart'].includes(action)) return res.status(400).json({ error: 'Invalid action' });
+  const gateways = gwLoad();
+  const gw = gateways[name];
+  if (!gw) return res.status(404).json({ error: 'Not found' });
   try {
     if (action === 'stop') {
       execSync(`systemctl stop openvpn-server@${name}`);
       execSync(`systemctl stop tun2socks@${name}`);
     } else {
+      gwSyncRoutingEnv(name, gw);
       execSync(`systemctl ${action} tun2socks@${name}`);
       execSync(`systemctl ${action} openvpn-server@${name}`);
     }
@@ -2302,6 +2412,7 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
     });
   }
   const tcpOnlyMode = detected.scheme !== 'socks5';
+  const wgSubnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || '';
 
   const gwPath = path.join(GW_DIR, name);
   const routingEnvPath = path.join(gwPath, 'routing.env');
@@ -2309,6 +2420,10 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
     let routingEnv = fs.readFileSync(routingEnvPath, 'utf8');
     routingEnv = routingEnv.replace(/^TCP_ONLY_MODE=.*/m, `TCP_ONLY_MODE=${tcpOnlyMode ? 1 : 0}`);
     if (!/^TCP_ONLY_MODE=/m.test(routingEnv)) routingEnv += `\nTCP_ONLY_MODE=${tcpOnlyMode ? 1 : 0}\n`;
+    if (wgSubnet) {
+      routingEnv = routingEnv.replace(/^WG_SUBNET=.*/m, `WG_SUBNET=${wgSubnet}`);
+      if (!/^WG_SUBNET=/m.test(routingEnv)) routingEnv += `WG_SUBNET=${wgSubnet}\n`;
+    }
     fs.writeFileSync(routingEnvPath, routingEnv);
   } catch(_) {}
 
@@ -2323,6 +2438,7 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
   gateways[name].proxy_url    = detected.url;
   gateways[name].proxy_scheme = detected.scheme;
   gateways[name].tcp_only_mode = tcpOnlyMode;
+  if (wgSubnet) gateways[name].wg_subnet = wgSubnet;
   gateways[name].exit_ip      = detected.exitIp;
   gateways[name].last_tested  = new Date().toISOString();
   if (gw.vpn_subnet) {
