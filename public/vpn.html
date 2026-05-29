@@ -96,9 +96,10 @@ tr:hover td{background:var(--surface2)}
     <h2>Create New Client</h2>
     <div class="row">
       <input class="flex1" id="new-client-name" placeholder="Client name (e.g. phone1, laptop)" maxlength="32">
+      <select id="new-client-gateway" style="min-width:220px;max-width:320px"></select>
       <button class="btn btn-blue" onclick="createClient()">+ Create</button>
     </div>
-    <div style="font-size:11px;color:var(--dim)">Letters, numbers, underscores, dashes only. Each client gets a unique IP and key pair.</div>
+    <div style="font-size:11px;color:var(--dim)">Choose a gateway, then generate the client. Each client gets a unique IP and key pair.</div>
   </div>
 
   <div class="card">
@@ -223,6 +224,7 @@ function switchTab(id, el) {
 // ── Load all ──────────────────────────────────────────────────────────────────
 async function loadAll() {
   loadWgStatus();
+  loadGatewayOptions();
   loadClients();
   loadSsInfo();
 }
@@ -266,13 +268,41 @@ async function loadClients() {
   } catch(e) { console.error(e); }
 }
 
+async function loadGatewayOptions() {
+  const select = document.getElementById('new-client-gateway');
+  try {
+    const d = await fetchApi('/api/gateways');
+    const gateways = (d.gateways || []).filter(g => g && g.name);
+    const ordered = gateways
+      .filter(g => g.name !== 'test')
+      .sort((a, b) => {
+        const countDiff = Number(b.client_count || 0) - Number(a.client_count || 0);
+        if (countDiff) return countDiff;
+        return String(b.last_tested || '').localeCompare(String(a.last_tested || ''));
+      });
+    const fallback = gateways.filter(g => g.name === 'test');
+    const items = ordered.concat(fallback);
+    if (!items.length) {
+      select.innerHTML = '<option value="">No gateways available</option>';
+      return;
+    }
+    select.innerHTML = items.map(g => `<option value="${esc(g.name)}">${esc(g.name)}${g.exit_ip ? ' — ' + esc(g.exit_ip) : ''}</option>`).join('');
+    const preferred = items.find(g => g.client_count > 0) || items[0];
+    if (preferred) select.value = preferred.name;
+  } catch (e) {
+    select.innerHTML = '<option value="">Gateway list unavailable</option>';
+  }
+}
+
 async function createClient() {
   const name = document.getElementById('new-client-name').value.trim().replace(/[^a-zA-Z0-9_-]/g,'');
+  const gateway = document.getElementById('new-client-gateway').value.trim();
   if (!name) { toast('Enter a valid client name'); return; }
+  if (!gateway) { toast('Choose a gateway'); return; }
   const btn = document.querySelector('[onclick="createClient()"]');
   btn.textContent = 'Creating...'; btn.disabled = true;
   try {
-    const d = await fetchApi('/api/vpn/wg/client', { method: 'POST', body: JSON.stringify({ name }) });
+    const d = await fetchApi('/api/vpn/wg/client', { method: 'POST', body: JSON.stringify({ name, gateway }) });
     if (d.error) { toast(d.error, true); return; }
     document.getElementById('new-client-name').value = '';
     openModal(d.name, d.conf, d.qr);

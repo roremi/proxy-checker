@@ -65,6 +65,30 @@ function parseProxyUrl(raw) {
   return null;
 }
 
+function gwServiceActive(unit) {
+  try {
+    execSync(`systemctl is-active --quiet ${unit}`, { stdio: 'ignore' });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function gwEnsureServicesRunning(name, gw) {
+  gwSyncRoutingEnv(name, gw);
+  const startOrder = [
+    `tun2socks@${name}`,
+    `dnsproxy@${name}`,
+    `dnsmasq-gw@${name}`,
+    `openvpn-server@${name}`,
+  ];
+  for (const unit of startOrder) {
+    if (!gwServiceActive(unit)) {
+      execSync(`systemctl enable --now ${unit}`, { stdio: 'ignore' });
+    }
+  }
+}
+
 function createAgent(proxyUrl) {
   if (/^socks/i.test(proxyUrl)) return new SocksProxyAgent(proxyUrl);
   return new HttpsProxyAgent(proxyUrl);
@@ -546,6 +570,15 @@ const WG_DIR     = '/etc/wireguard';
 const WG_DATA    = path.join(__dirname, 'vpn-clients.json');
 const SS_CONF    = '/etc/shadowsocks-libev/config.json';
 const SERVER_IP  = process.env.SERVER_IP || 'multiebay.com';
+const SERVER_IP_WG = (() => {
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(SERVER_IP)) return SERVER_IP;
+  try {
+    const ip = execSync(`getent ahostsv4 ${SERVER_IP} | awk 'NR==1{print $1}'`, { shell: '/bin/bash' }).toString().trim();
+    return ip || SERVER_IP;
+  } catch(_) {
+    return SERVER_IP;
+  }
+})();
 const VPN_TOKEN  = process.env.VPN_TOKEN || 'vpnadmin2026';
 const PORT       = process.env.PORT || 3000;
 
@@ -580,6 +613,24 @@ function wgInferGatewayName(clientName, gateways) {
     .find(gatewayName => safeName === gatewayName || safeName.startsWith(`${gatewayName}_`)) || '';
 }
 
+function wgPickDefaultGateway(gateways) {
+  if (!gateways || typeof gateways !== 'object') return '';
+  return Object.values(gateways)
+    .filter(gw => gw && gw.name && gw.name !== 'test' && (gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index)))
+    .sort((a, b) => {
+      const countDiff = (Number(b.client_count || 0) - Number(a.client_count || 0));
+      if (countDiff) return countDiff;
+      const timeDiff = String(b.last_tested || '').localeCompare(String(a.last_tested || ''));
+      if (timeDiff) return timeDiff;
+      return String(a.name).localeCompare(String(b.name));
+    })[0]?.name || '';
+}
+
+function wgGatewayDns(gw) {
+  const m = String(gw?.vpn_subnet || '').match(/^(\d+\.\d+\.\d+)\.\d+\/\d+$/);
+  return m ? `${m[1]}.1` : '';
+}
+
 function wgNextIp(clients, subnet = '10.8.0.0/24') {
   const prefix = wgSubnetPrefix(subnet);
   const used = new Set(
@@ -601,12 +652,13 @@ function wgCreateClient(name, gatewayName = '') {
   const clients = wgLoadClients();
   let subnet = '10.8.0.0/24';
   const gateways = gwLoad();
-  const resolvedGatewayName = gatewayName || wgInferGatewayName(name, gateways);
+  const resolvedGatewayName = gatewayName || wgInferGatewayName(name, gateways) || wgPickDefaultGateway(gateways) || '';
   if (resolvedGatewayName) {
     const gw = gateways[resolvedGatewayName];
     if (!gw) throw new Error('Gateway not found for WireGuard client');
     subnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || subnet;
   }
+  const dns = resolvedGatewayName ? (wgGatewayDns(gateways[resolvedGatewayName]) || '1.1.1.1, 8.8.8.8') : '1.1.1.1, 8.8.8.8';
   const ip      = wgNextIp(clients, subnet);
   const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
 
@@ -632,13 +684,14 @@ function wgCreateClient(name, gatewayName = '') {
   const conf = `[Interface]
 PrivateKey = ${privKey}
 Address = ${ip}/${mask}
-DNS = 1.1.1.1, 8.8.8.8
+MTU = 1280
+DNS = ${dns}
 
 [Peer]
 PublicKey = ${serverPub}
 PresharedKey = ${psk}
-Endpoint = ${SERVER_IP}:51820
-AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = ${SERVER_IP_WG}:51820
+AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 `;
   return { name, ip, subnet, conf };
@@ -660,9 +713,12 @@ function wgDeleteClient(name) {
 }
 
 function wgBuildConf(c) {
+  const gateways = gwLoad();
+  const gw = c.gateway ? gateways[c.gateway] : null;
+  const dns = wgGatewayDns(gw) || '1.1.1.1, 8.8.8.8';
   const serverPub = fs.readFileSync(path.join(WG_DIR, 'server_public.key'), 'utf8').trim();
   const mask = wgSubnetMask(c.subnet || '10.8.0.0/24');
-  return `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/${mask}\nDNS = 1.1.1.1, 8.8.8.8\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP}:51820\nAllowedIPs = 0.0.0.0/0, ::/0\nPersistentKeepalive = 25\n`;
+  return `[Interface]\nPrivateKey = ${c.privKey}\nAddress = ${c.ip}/${mask}\nMTU = 1280\nDNS = ${dns}\n\n[Peer]\nPublicKey = ${serverPub}\nPresharedKey = ${c.psk}\nEndpoint = ${SERVER_IP_WG}:51820\nAllowedIPs = 0.0.0.0/0\nPersistentKeepalive = 25\n`;
 }
 
 function wgBuildQrDataUrl(conf) {
@@ -1189,6 +1245,7 @@ app.post('/api/customer/gateway/:name/wg-client', requireApiKey(), (req, res) =>
   const gateways = gwLoad();
   const gw = gateways[name];
   if (!gw) return res.status(404).json({ error: 'Gateway not found' });
+  try { gwEnsureServicesRunning(name, gw); } catch (e) { return res.status(500).json({ error: `Gateway service unavailable: ${e.message}` }); }
   const expectedSubnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || '10.8.0.0/24';
 
   const keyPrefix = k.id.replace(/-/g, '').slice(0, 8);
@@ -1606,11 +1663,12 @@ app.get('/api/vpn/wg/clients', requireVpnToken, (req, res) => {
 // WireGuard: create client
 app.post('/api/vpn/wg/client', requireVpnToken, (req, res) => {
   const name = (req.body.name || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
+  const gatewayName = (req.body.gateway || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32);
   if (!name) return res.status(400).json({ error: 'Invalid name' });
   const clients = wgLoadClients();
   if (clients[name]) return res.status(409).json({ error: 'Client already exists' });
   try {
-    const result = wgCreateClient(name);
+    const result = wgCreateClient(name, gatewayName);
     // Generate QR
     const qr = execSync(`echo "${result.conf.replace(/"/g,'\\"')}" | qrencode -t png -o -`, { maxBuffer: 2*1024*1024 });
     result.qr = `data:image/png;base64,${qr.toString('base64')}`;
@@ -2215,12 +2273,35 @@ app.post('/api/gateways/:name/:action(start|stop|restart)', requireVpnToken, (re
   if (!gw) return res.status(404).json({ error: 'Not found' });
   try {
     if (action === 'stop') {
-      execSync(`systemctl stop openvpn-server@${name}`);
-      execSync(`systemctl stop tun2socks@${name}`);
+      for (const unit of [
+        `openvpn-server@${name}`,
+        `dnsmasq-gw@${name}`,
+        `dnsproxy@${name}`,
+        `tun2socks@${name}`,
+      ]) {
+        execSync(`systemctl stop ${unit}`);
+      }
     } else {
       gwSyncRoutingEnv(name, gw);
-      execSync(`systemctl ${action} tun2socks@${name}`);
-      execSync(`systemctl ${action} openvpn-server@${name}`);
+      if (action === 'start') {
+        for (const unit of [
+          `tun2socks@${name}`,
+          `dnsproxy@${name}`,
+          `dnsmasq-gw@${name}`,
+          `openvpn-server@${name}`,
+        ]) {
+          execSync(`systemctl enable --now ${unit}`);
+        }
+      } else {
+        for (const unit of [
+          `tun2socks@${name}`,
+          `dnsproxy@${name}`,
+          `dnsmasq-gw@${name}`,
+          `openvpn-server@${name}`,
+        ]) {
+          execSync(`systemctl restart ${unit}`);
+        }
+      }
     }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ error: `Failed: ${e.message}` }); }
