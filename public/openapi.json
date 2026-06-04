@@ -1,0 +1,408 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Proxy Checker Public API",
+    "version": "1.0.0",
+    "description": "Public/customer API for integrating proxy checks, gateway controls, VPN client provisioning, captures, and analysis."
+  },
+  "servers": [
+    { "url": "/", "description": "Same host" }
+  ],
+  "tags": [
+    { "name": "Auth" },
+    { "name": "Proxy Check" },
+    { "name": "Customer" },
+    { "name": "Gateway Public" },
+    { "name": "Captures" },
+    { "name": "Analyze" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      },
+      "AdminToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-vpn-token"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        },
+        "required": ["error"]
+      },
+      "ProxyCheckRequest": {
+        "type": "object",
+        "properties": {
+          "proxies": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "One proxy per item"
+          },
+          "concurrency": { "type": "integer", "minimum": 1, "maximum": 50, "default": 5 },
+          "timeout": { "type": "integer", "minimum": 5000, "maximum": 120000, "default": 30000 }
+        },
+        "required": ["proxies"]
+      },
+      "ProxyCheckStart": {
+        "type": "object",
+        "properties": {
+          "jobId": { "type": "string" },
+          "total": { "type": "integer" }
+        }
+      },
+      "CustomerProxyCreate": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "proxy": { "type": "string", "description": "host:port, host:port:user:pass, socks5://..., http://..." },
+          "country": { "type": "string" }
+        },
+        "required": ["name", "proxy"]
+      },
+      "GatewayClientCreate": {
+        "type": "object",
+        "properties": {
+          "client_name": { "type": "string" }
+        },
+        "required": ["client_name"]
+      },
+      "WireGuardClientCreate": {
+        "type": "object",
+        "properties": {
+          "client_name": { "type": "string" }
+        },
+        "required": ["client_name"]
+      },
+      "AiAnalyzeRequest": {
+        "type": "object",
+        "properties": {
+          "provider": { "type": "string", "example": "openai" },
+          "apiKey": { "type": "string", "description": "BYOK; not persisted" },
+          "baseURL": { "type": "string" },
+          "model": { "type": "string" },
+          "limit": { "type": "integer", "default": 5000 },
+          "since_minutes": { "type": "integer" },
+          "domain": { "type": "string" },
+          "keyword": { "type": "string" },
+          "app": { "type": "string" },
+          "wantReasoning": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/key/me": {
+      "get": {
+        "tags": ["Auth", "Customer"],
+        "summary": "Get current API key profile",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": {
+          "200": { "description": "Key profile" },
+          "401": { "description": "Invalid key", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/api/check": {
+      "post": {
+        "tags": ["Proxy Check"],
+        "summary": "Start proxy check job",
+        "description": "If x-api-key is provided, permission/quota are enforced.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ProxyCheckRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Job started",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ProxyCheckStart" }
+              }
+            }
+          },
+          "400": { "description": "Bad request" },
+          "429": { "description": "Quota exceeded" }
+        }
+      }
+    },
+    "/api/stream/{jobId}": {
+      "get": {
+        "tags": ["Proxy Check"],
+        "summary": "SSE stream for proxy-check job",
+        "parameters": [
+          { "name": "jobId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "text/event-stream" },
+          "404": { "description": "Job not found" }
+        }
+      }
+    },
+    "/api/customer/proxies": {
+      "get": {
+        "tags": ["Customer"],
+        "summary": "List customer-owned gateways",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "Gateway list" } }
+      }
+    },
+    "/api/customer/proxy": {
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Create customer-owned proxy gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CustomerProxyCreate" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Created" },
+          "400": { "description": "Invalid input" }
+        }
+      }
+    },
+    "/api/customer/proxy/{name}": {
+      "put": {
+        "tags": ["Customer"],
+        "summary": "Update owned proxy gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "proxy": { "type": "string" },
+                  "country": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "tags": ["Customer"],
+        "summary": "Delete owned proxy gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/customer/gateway/{name}/client": {
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Create OpenVPN client for gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/GatewayClientCreate" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Returns ovpn content" } }
+      }
+    },
+    "/api/customer/gateway/{name}/wg-client": {
+      "post": {
+        "tags": ["Customer"],
+        "summary": "Create WireGuard client for gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WireGuardClientCreate" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "WG config + qr" } }
+      }
+    },
+    "/api/customer/wg/client/{wgName}": {
+      "get": {
+        "tags": ["Customer"],
+        "summary": "Get owned WireGuard client config",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "wgName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "WG config" } }
+      },
+      "delete": {
+        "tags": ["Customer"],
+        "summary": "Delete owned WireGuard client",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "wgName", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/customer/library": {
+      "get": {
+        "tags": ["Customer"],
+        "summary": "List customer proxy library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "Library list" } }
+      },
+      "delete": {
+        "tags": ["Customer"],
+        "summary": "Clear customer proxy library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "Cleared" } }
+      }
+    },
+    "/api/customer/library/{proxy}": {
+      "delete": {
+        "tags": ["Customer"],
+        "summary": "Delete one proxy from library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "proxy", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/customer/library/export": {
+      "get": {
+        "tags": ["Customer"],
+        "summary": "Export customer proxy library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "text/plain export" } }
+      }
+    },
+    "/api/public/g/{name}/info": {
+      "get": {
+        "tags": ["Gateway Public"],
+        "summary": "Gateway status/info",
+        "description": "Requires gateway access via x-api-key or x-vpn-token.",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Gateway info" } }
+      }
+    },
+    "/api/public/g/{name}/captures": {
+      "get": {
+        "tags": ["Captures", "Gateway Public"],
+        "summary": "List gateway captures",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "method", "in": "query", "schema": { "type": "string" } },
+          { "name": "host_like", "in": "query", "schema": { "type": "string" } },
+          { "name": "status_min", "in": "query", "schema": { "type": "integer" } },
+          { "name": "status_max", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Capture summaries" } }
+      },
+      "delete": {
+        "tags": ["Captures", "Gateway Public"],
+        "summary": "Clear captures for gateway",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Cleared" } }
+      }
+    },
+    "/api/public/g/{name}/captures/{id}": {
+      "get": {
+        "tags": ["Captures", "Gateway Public"],
+        "summary": "Get capture detail",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Capture detail" } }
+      }
+    },
+    "/api/public/g/{name}/analyze": {
+      "get": {
+        "tags": ["Analyze", "Gateway Public"],
+        "summary": "Rule-based gateway analysis",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "since_minutes", "in": "query", "schema": { "type": "integer" } },
+          { "name": "domain", "in": "query", "schema": { "type": "string" } },
+          { "name": "keyword", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Analysis report" } }
+      }
+    },
+    "/api/public/g/{name}/analyze/ai": {
+      "post": {
+        "tags": ["Analyze", "Gateway Public"],
+        "summary": "AI summary for gateway traffic",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AiAnalyzeRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "AI summary" } }
+      }
+    },
+    "/api/public/g/{name}/analyze/ai/stream": {
+      "post": {
+        "tags": ["Analyze", "Gateway Public"],
+        "summary": "AI summary stream (SSE)",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AiAnalyzeRequest" }
+            }
+          }
+        },
+        "responses": { "200": { "description": "text/event-stream" } }
+      }
+    }
+  }
+}

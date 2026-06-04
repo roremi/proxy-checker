@@ -36,6 +36,7 @@ realtime traffic capture & AI analysis, customer self-service portal).
 ## Quick links
 
 - [INSTALL.md](INSTALL.md) — full step-by-step server install.
+- [API.md](API.md) — complete API reference for all web features.
 - `.env.example` — runtime env vars.
 - `settings.example.json`, `api-keys.example.json`, `gateways.example.json`,
   `l2tp-users.example.json` — initial-state templates.

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Docs - Proxy Checker</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    body { margin: 0; background: #0b1220; color: #e5e7eb; font-family: "Segoe UI", Tahoma, sans-serif; }
+    .top {
+      padding: 14px 18px;
+      border-bottom: 1px solid #23304a;
+      background: linear-gradient(120deg, #0f172a, #111827 55%, #1f2937);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .title { font-size: 17px; font-weight: 700; }
+    .meta { font-size: 12px; color: #94a3b8; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      border: 1px solid #334155;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 12px;
+      text-decoration: none;
+    }
+    .btn:hover { background: #1f2937; }
+    #swagger-ui { max-width: 1300px; margin: 0 auto; }
+    .swagger-ui .topbar { display: none; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div>
+      <div class="title">Proxy Checker Integration API</div>
+      <div class="meta">Interactive docs for customers and integrators</div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/openapi.json" target="_blank" rel="noopener">Download OpenAPI JSON</a>
+      <a class="btn" href="/portal">Customer Portal</a>
+      <a class="btn" href="/home">Home</a>
+    </div>
+  </div>
+  <div id="swagger-ui"></div>
+
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.ui = SwaggerUIBundle({
+      url: '/openapi.json',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      displayRequestDuration: true,
+      persistAuthorization: true,
+      docExpansion: 'list',
+      defaultModelsExpandDepth: 1,
+      filter: true
+    });
+  </script>
+</body>
+</html>

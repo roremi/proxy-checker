@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Developer API Docs</title>
+  <style>
+    :root {
+      --bg: #0a0f1e;
+      --panel: #101a2d;
+      --panel2: #0d1525;
+      --border: #1a2f4a;
+      --text: #e4eaf4;
+      --muted: #8fa8c8;
+      --blue: #3d7ef8;
+      --green: #16c87a;
+      --orange: #f59e0b;
+      --red: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: radial-gradient(circle at 20% -10%, #1a2f4a 0, var(--bg) 45%);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+    .hero {
+      background: linear-gradient(160deg, rgba(61,126,248,0.16), rgba(16,26,45,0.9));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0 0 6px; font-size: 28px; }
+    .sub { color: var(--muted); margin: 0; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .btn {
+      display: inline-block;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+      text-decoration: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .card h2 {
+      margin: 0;
+      font-size: 14px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel2);
+    }
+    .body { padding: 12px; font-size: 13px; color: var(--muted); }
+    .kbd {
+      display: inline-block;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      background: #0a1324;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 2px 7px;
+    }
+    .endpoint {
+      background: #0b1425;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+    .endpoint-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      background: #0b172d;
+    }
+    .method {
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      background: #0a1324;
+      color: #b9d2ff;
+      min-width: 50px;
+      text-align: center;
+    }
+    .method.post { color: #86efac; }
+    .method.put { color: #fcd34d; }
+    .method.delete { color: #fca5a5; }
+    .path {
+      font-family: Consolas, monospace;
+      color: #dbeafe;
+      font-size: 12px;
+      word-break: break-word;
+    }
+    .endpoint-body { padding: 10px 12px 12px; }
+    .line { margin: 6px 0; }
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--border);
+      background: #111b30;
+      color: #d4e2f8;
+      border-radius: 20px;
+      padding: 1px 8px;
+      font-size: 11px;
+      margin-right: 6px;
+    }
+    .pill.ok { border-color: rgba(22,200,122,.35); color: #86efac; }
+    .pill.warn { border-color: rgba(245,158,11,.35); color: #fcd34d; }
+    .pill.err { border-color: rgba(239,68,68,.35); color: #fca5a5; }
+    pre {
+      margin: 8px 0;
+      background: #0a1324;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      overflow: auto;
+      color: #cddaf0;
+      font-size: 12px;
+    }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    @media (max-width: 900px) { .toc { grid-template-columns: 1fr; } }
+    .toc a {
+      display: block;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      background: #0c1528;
+      border-radius: 8px;
+      color: #c9ddff;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .toc a:hover { border-color: #2f4b75; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Customer Integration API</h1>
+      <p class="sub">Detailed docs for each API: auth, parameters, body schema, and working request/response examples.</p>
+      <div class="row">
+        <a class="btn primary" href="/openapi-customer.json" target="_blank" rel="noreferrer">OpenAPI JSON</a>
+        <a class="btn" href="/api-docs" target="_blank" rel="noreferrer">Interactive API</a>
+        <a class="btn" href="/portal" target="_blank" rel="noreferrer">Customer Portal</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Quick Start</h2>
+      <div class="body">
+        <div class="line">1. Put your key in header: <span class="kbd">x-api-key: pk_xxx</span></div>
+        <div class="line">2. Test auth first:</div>
+<pre>curl -X GET "http://YOUR_HOST:3000/api/key/me" \
+  -H "x-api-key: pk_xxxxxxxxxxxxxxxxx"</pre>
+        <div class="line">3. Then call any customer endpoint below.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Navigation</h2>
+      <div class="body toc">
+        <a href="#auth-profile">Authentication + Profile</a>
+        <a href="#proxy-check">Proxy Checker</a>
+        <a href="#my-gateway">My Gateways (CRUD + Control)</a>
+        <a href="#ovpn">OpenVPN Client APIs</a>
+        <a href="#wg">WireGuard Client APIs</a>
+        <a href="#l2tp">L2TP APIs</a>
+        <a href="#library">Proxy Library APIs</a>
+        <a href="#public-gateway">Public Gateway APIs</a>
+        <a href="#captures">Capture APIs</a>
+        <a href="#analysis">Analyze APIs</a>
+        <a href="#streaming">SSE / WebSocket</a>
+        <a href="#errors">Error Handling</a>
+      </div>
+    </section>
+
+    <section class="card" id="auth-profile">
+      <h2>Authentication + Profile</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/key/me</span>
+            <span class="pill">Auth: x-api-key</span>
+          </div>
+          <div class="endpoint-body">
+            <div class="line">Purpose: validate key and return permissions, quotas, and owned resources.</div>
+<pre>curl -X GET "http://YOUR_HOST:3000/api/key/me" \
+  -H "x-api-key: pk_xxxxxxxxx"</pre>
+<pre>{
+  "name": "customer-a",
+  "permissions": ["check_proxy", "vpn_clients"],
+  "my_gateways": ["gw_customer_a"],
+  "proxy_checks_used": 12,
+  "proxy_check_limit": 500
+}</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="proxy-check">
+      <h2>Proxy Checker</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method post">POST</span>
+            <span class="path">/api/check</span>
+            <span class="pill">Auth: optional x-api-key</span>
+          </div>
+          <div class="endpoint-body">
+            <div class="line">Body:</div>
+<pre>{
+  "proxies": ["socks5://1.2.3.4:1080", "host:port:user:pass"],
+  "concurrency": 5,
+  "timeout": 30000
+}</pre>
+            <div class="line">cURL:</div>
+<pre>curl -X POST "http://YOUR_HOST:3000/api/check" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: pk_xxxxxxxxx" \
+  -d '{"proxies":["socks5://1.2.3.4:1080"],"concurrency":5,"timeout":30000}'</pre>
+            <div class="line">Response:</div>
+<pre>{ "jobId": "8f0...", "total": 1 }</pre>
+        </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/stream/:jobId</span>
+            <span class="pill">SSE</span>
+          </div>
+          <div class="endpoint-body">
+            <div class="line">Subscribe to realtime results from /api/check job.</div>
+<pre>const es = new EventSource(`/api/stream/${jobId}`);
+es.onmessage = (e) =&gt; console.log(JSON.parse(e.data));</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="my-gateway">
+      <h2>My Gateways (CRUD + Control)</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/customer/proxies</span>
+            <span class="pill">Auth: x-api-key</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/proxies"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method post">POST</span>
+            <span class="path">/api/customer/proxy</span>
+          </div>
+          <div class="endpoint-body">
+            <div class="line">Body:</div>
+<pre>{
+  "proxy_url": "socks5://user:pass@host:port",
+  "allow_http_proxy": true
+}</pre>
+<pre>curl -X POST "http://YOUR_HOST:3000/api/customer/proxy" \
+  -H "x-api-key: pk_xxx" -H "Content-Type: application/json" \
+  -d '{"proxy_url":"socks5://user:pass@host:port","allow_http_proxy":true}'</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method put">PUT</span>
+            <span class="path">/api/customer/proxy/:name</span>
+          </div>
+          <div class="endpoint-body">
+            <div class="line">Update existing gateway's upstream proxy.</div>
+<pre>curl -X PUT "http://YOUR_HOST:3000/api/customer/proxy/gw_a" \
+  -H "x-api-key: pk_xxx" -H "Content-Type: application/json" \
+  -d '{"proxy_url":"socks5://new_user:new_pass@host:port"}'</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method delete">DELETE</span>
+            <span class="path">/api/customer/proxy/:name</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -X DELETE "http://YOUR_HOST:3000/api/customer/proxy/gw_a" \
+  -H "x-api-key: pk_xxx"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/customer/gateway/:name/ip</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/gateway/gw_a/ip"</pre>
+<pre>{ "ip": "104.21.x.x", "changed": false }</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method post">POST</span>
+            <span class="path">/api/customer/gateway/:name/:action(start|stop|restart)</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -X POST "http://YOUR_HOST:3000/api/customer/gateway/gw_a/restart" \
+  -H "x-api-key: pk_xxx"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method post">POST</span>
+            <span class="path">/api/customer/gateway/:name/mitm/:action(start|stop)</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -X POST "http://YOUR_HOST:3000/api/customer/gateway/gw_a/mitm/start" \
+  -H "x-api-key: pk_xxx"</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="ovpn">
+      <h2>OpenVPN Client APIs</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/customer/gateway/:name/clients</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/gateway/gw_a/clients"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method post">POST</span>
+            <span class="path">/api/customer/gateway/:name/client</span>
+          </div>
+          <div class="endpoint-body">
+            <div class="line">Creates OpenVPN profile and returns ovpn text.</div>
+<pre>curl -X POST "http://YOUR_HOST:3000/api/customer/gateway/gw_a/client" \
+  -H "x-api-key: pk_xxx" -H "Content-Type: application/json" \
+  -d '{"client_name":"laptop1"}'</pre>
+<pre>{
+  "ok": true,
+  "name": "laptop1",
+  "cert_name": "gw_a_ab12cd34_laptop1",
+  "ovpn": "client\n..."
+}</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/customer/vpn/client/:certName/ovpn</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" \
+  "http://YOUR_HOST:3000/api/customer/vpn/client/gw_a_ab12cd34_laptop1/ovpn"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method delete">DELETE</span>
+            <span class="path">/api/customer/vpn/client/:certName</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -X DELETE -H "x-api-key: pk_xxx" \
+  "http://YOUR_HOST:3000/api/customer/vpn/client/gw_a_ab12cd34_laptop1"</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="wg">
+      <h2>WireGuard Client APIs</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/customer/gateway/:name/wg-clients</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/gateway/gw_a/wg-clients"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method post">POST</span>
+            <span class="path">/api/customer/gateway/:name/wg-client</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -X POST "http://YOUR_HOST:3000/api/customer/gateway/gw_a/wg-client" \
+  -H "x-api-key: pk_xxx" -H "Content-Type: application/json" \
+  -d '{"client_name":"phone1"}'</pre>
+<pre>{
+  "ok": true,
+  "name": "phone1",
+  "wg_name": "gw_a_ab12cd34_phone1",
+  "conf": "[Interface]\n...",
+  "qr": "data:image/png;base64,..."
+}</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/customer/wg/client/:wgName</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" \
+  "http://YOUR_HOST:3000/api/customer/wg/client/gw_a_ab12cd34_phone1"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method delete">DELETE</span>
+            <span class="path">/api/customer/wg/client/:wgName</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -X DELETE -H "x-api-key: pk_xxx" \
+  "http://YOUR_HOST:3000/api/customer/wg/client/gw_a_ab12cd34_phone1"</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="l2tp">
+      <h2>L2TP APIs</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method">GET</span>
+            <span class="path">/api/customer/l2tp</span>
+          </div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/l2tp"</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head">
+            <span class="method post">POST</span>
+            <span class="path">/api/customer/l2tp/gateway/:name</span>
+          </div>
+          <div class="endpoint-body">
+            <div class="line">Create (or return existing) L2TP credentials for your owned gateway.</div>
+<pre>curl -X POST -H "x-api-key: pk_xxx" \
+  "http://YOUR_HOST:3000/api/customer/l2tp/gateway/gw_a"</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="library">
+      <h2>Proxy Library APIs</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/customer/library</span></div>
+          <div class="endpoint-body"><pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/library"</pre></div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method delete">DELETE</span><span class="path">/api/customer/library/:proxy</span></div>
+          <div class="endpoint-body"><pre>curl -X DELETE -H "x-api-key: pk_xxx" \
+  "http://YOUR_HOST:3000/api/customer/library/socks5%3A%2F%2F1.2.3.4%3A1080"</pre></div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method delete">DELETE</span><span class="path">/api/customer/library</span></div>
+          <div class="endpoint-body"><pre>curl -X DELETE -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/library"</pre></div>
+        </div>
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/customer/library/export</span></div>
+          <div class="endpoint-body"><pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/customer/library/export" -o proxy-library.txt</pre></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="public-gateway">
+      <h2>Public Gateway APIs (Scoped Access)</h2>
+      <div class="body">
+        <div class="line">These endpoints require gateway access via <span class="kbd">x-api-key</span> or admin <span class="kbd">x-vpn-token</span>.</div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/public/g/:name/info</span></div>
+          <div class="endpoint-body"><pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/info"</pre></div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method post">POST</span><span class="path">/api/public/g/:name/mitm/:action(start|stop)</span></div>
+          <div class="endpoint-body"><pre>curl -X POST -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/mitm/start"</pre></div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method post">POST</span><span class="path">/api/public/g/:name/client</span></div>
+          <div class="endpoint-body">
+<pre>curl -X POST "http://YOUR_HOST:3000/api/public/g/gw_a/client" \
+  -H "x-api-key: pk_xxx" -H "Content-Type: application/json" \
+  -d '{"client_name":"guest1"}' -o gw_a_guest1.ovpn</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="captures">
+      <h2>Capture APIs</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/public/g/:name/captures</span></div>
+          <div class="endpoint-body">
+            <div class="line">Query params: <span class="kbd">limit</span>, <span class="kbd">q</span>, <span class="kbd">method</span>, <span class="kbd">host_like</span>, <span class="kbd">path_like</span>, <span class="kbd">status_min</span>, <span class="kbd">status_max</span>, <span class="kbd">before_ts</span>, <span class="kbd">after_ts</span></div>
+<pre>curl -H "x-api-key: pk_xxx" \
+  "http://YOUR_HOST:3000/api/public/g/gw_a/captures?limit=100&status_min=400&q=login"</pre>
+<pre>{ "flows": [{"id":"...","method":"GET","status":200}], "count": 100, "total": 4321 }</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/public/g/:name/captures/:id</span></div>
+          <div class="endpoint-body"><pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/captures/flow123"</pre></div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method delete">DELETE</span><span class="path">/api/public/g/:name/captures</span></div>
+          <div class="endpoint-body"><pre>curl -X DELETE -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/captures"</pre></div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/public/g/:name/stats</span></div>
+          <div class="endpoint-body"><pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/stats"</pre></div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/public/g/:name/export.ndjson | .har | .csv</span></div>
+          <div class="endpoint-body">
+<pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/export.ndjson" -o gw_a.ndjson
+curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/export.har" -o gw_a.har
+curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/export.csv" -o gw_a.csv</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="analysis">
+      <h2>Analyze APIs</h2>
+      <div class="body">
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/public/g/:name/analyze/info</span></div>
+          <div class="endpoint-body"><pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/analyze/info"</pre></div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method post">POST</span><span class="path">/api/public/g/:name/analyze/models</span></div>
+          <div class="endpoint-body">
+<pre>curl -X POST "http://YOUR_HOST:3000/api/public/g/gw_a/analyze/models" \
+  -H "x-api-key: pk_xxx" -H "Content-Type: application/json" \
+  -d '{"provider":"openai","apiKey":"sk-..."}'</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method">GET</span><span class="path">/api/public/g/:name/analyze</span></div>
+          <div class="endpoint-body"><pre>curl -H "x-api-key: pk_xxx" "http://YOUR_HOST:3000/api/public/g/gw_a/analyze?limit=3000&since_minutes=60"</pre></div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method post">POST</span><span class="path">/api/public/g/:name/analyze/ai</span></div>
+          <div class="endpoint-body">
+<pre>curl -X POST "http://YOUR_HOST:3000/api/public/g/gw_a/analyze/ai" \
+  -H "x-api-key: pk_xxx" -H "Content-Type: application/json" \
+  -d '{"provider":"openai","apiKey":"sk-...","model":"gpt-4o-mini","limit":3000}'</pre>
+          </div>
+        </div>
+
+        <div class="endpoint">
+          <div class="endpoint-head"><span class="method post">POST</span><span class="path">/api/public/g/:name/analyze/ai/stream</span><span class="pill">SSE</span></div>
+          <div class="endpoint-body">
+<pre>const r = await fetch('/api/public/g/gw_a/analyze/ai/stream', {
+  method: 'POST',
+  headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
+  body: JSON.stringify({ provider: 'openai', apiKey: 'sk-...', model: 'gpt-4o-mini' })
+});
+const reader = r.body.getReader();</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="streaming">
+      <h2>SSE / WebSocket</h2>
+      <div class="body">
+        <div class="line">Gateway realtime events:</div>
+<pre>const ws = new WebSocket(`wss://YOUR_HOST/ws/g/gw_a?api_key=${encodeURIComponent(key)}`);
+ws.onmessage = (e) =&gt; console.log(JSON.parse(e.data));</pre>
+        <div class="line">Gateway logs stream (SSE):</div>
+<pre>const es = new EventSource(`/api/public/g/gw_a/logs/stream?api_key=${encodeURIComponent(key)}&service=all&lines=100`);
+es.onmessage = (e) =&gt; console.log(JSON.parse(e.data));</pre>
+      </div>
+    </section>
+
+    <section class="card" id="errors">
+      <h2>Error Handling</h2>
+      <div class="body">
+        <div class="line"><span class="pill err">401</span> Invalid key/token</div>
+        <div class="line"><span class="pill err">403</span> No permission / no gateway access</div>
+        <div class="line"><span class="pill warn">404</span> Resource not found</div>
+        <div class="line"><span class="pill warn">429</span> Proxy-check quota exceeded</div>
+        <div class="line"><span class="pill err">500</span> Server-side error</div>
+<pre>{ "error": "message" }</pre>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Machine-Readable Contract</h2>
+      <div class="body">
+        <div class="line">Import into Postman/Insomnia/Bruno/codegen:</div>
+        <div class="line"><a class="btn" href="/openapi-customer.json" target="_blank" rel="noreferrer">Download /openapi-customer.json</a></div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

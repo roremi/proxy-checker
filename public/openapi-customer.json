@@ -1,0 +1,440 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Proxy Checker Customer API",
+    "version": "1.0.0",
+    "description": "Public/customer integration API for proxy-checker."
+  },
+  "servers": [
+    { "url": "http://localhost:3000" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      },
+      "AdminToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-vpn-token"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/key/me": {
+      "get": {
+        "summary": "Current key profile",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": {
+          "200": { "description": "OK" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/customer/gateways": {
+      "get": {
+        "summary": "List accessible gateways",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/proxies": {
+      "get": {
+        "summary": "List owned proxy gateways",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/proxy": {
+      "post": {
+        "summary": "Create owned proxy gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Created" } }
+      }
+    },
+    "/api/customer/proxy/{name}": {
+      "put": {
+        "summary": "Update owned proxy gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "Updated" } }
+      },
+      "delete": {
+        "summary": "Delete owned proxy gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/customer/usage": {
+      "get": {
+        "summary": "Get usage counters",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/gateway/{name}/ip": {
+      "get": {
+        "summary": "Get gateway exit IP",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/gateway/{name}/{action}": {
+      "post": {
+        "summary": "Control owned gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "action", "in": "path", "required": true, "schema": { "type": "string", "enum": ["start", "stop", "restart"] } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/gateway/{name}/mitm/{action}": {
+      "post": {
+        "summary": "Toggle MITM for owned gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "action", "in": "path", "required": true, "schema": { "type": "string", "enum": ["start", "stop"] } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/gateway/{name}/clients": {
+      "get": {
+        "summary": "List OpenVPN clients for owned gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/gateway/{name}/client": {
+      "post": {
+        "summary": "Create OpenVPN client",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "client_name": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/vpn/clients": {
+      "get": {
+        "summary": "List all owned OpenVPN clients",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/vpn/client/{certName}/ovpn": {
+      "get": {
+        "summary": "Get OpenVPN profile",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "certName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/vpn/client/{certName}": {
+      "delete": {
+        "summary": "Delete owned OpenVPN client",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "certName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/customer/gateway/{name}/wg-clients": {
+      "get": {
+        "summary": "List owned WireGuard clients for gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/gateway/{name}/wg-client": {
+      "post": {
+        "summary": "Create owned WireGuard client",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "client_name": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/wg/client/{wgName}": {
+      "get": {
+        "summary": "Get owned WireGuard client",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "wgName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      },
+      "delete": {
+        "summary": "Delete owned WireGuard client",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "wgName", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/customer/l2tp": {
+      "get": {
+        "summary": "List own L2TP credentials",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/l2tp/gateway/{name}": {
+      "post": {
+        "summary": "Create/get own L2TP credential for owned gateway",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/library": {
+      "get": {
+        "summary": "List personal proxy library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "OK" } }
+      },
+      "delete": {
+        "summary": "Clear personal proxy library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/library/{proxy}": {
+      "delete": {
+        "summary": "Delete one proxy from personal library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "parameters": [{ "name": "proxy", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/customer/library/export": {
+      "get": {
+        "summary": "Export personal library",
+        "security": [{ "ApiKeyAuth": [] }],
+        "responses": { "200": { "description": "Text export" } }
+      }
+    },
+    "/api/check": {
+      "post": {
+        "summary": "Start proxy check batch job",
+        "security": [{ "ApiKeyAuth": [] }, {}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["proxies"],
+                "properties": {
+                  "proxies": { "type": "array", "items": { "type": "string" } },
+                  "concurrency": { "type": "integer", "minimum": 1, "maximum": 50 },
+                  "timeout": { "type": "integer" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "Job started" } }
+      }
+    },
+    "/api/stream/{jobId}": {
+      "get": {
+        "summary": "SSE stream for checker job",
+        "parameters": [{ "name": "jobId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "text/event-stream" },
+          "404": { "description": "Job not found" }
+        }
+      }
+    },
+    "/api/public/g/{name}/info": {
+      "get": {
+        "summary": "Gateway info/status",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/mitm/{action}": {
+      "post": {
+        "summary": "Toggle gateway MITM",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "action", "in": "path", "required": true, "schema": { "type": "string", "enum": ["start", "stop"] } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/client": {
+      "post": {
+        "summary": "Create OpenVPN profile for gateway",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "properties": { "client_name": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "OVPN file download" } }
+      }
+    },
+    "/api/public/g/{name}/captures": {
+      "get": {
+        "summary": "List captures for gateway",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "method", "in": "query", "schema": { "type": "string" } },
+          { "name": "status_min", "in": "query", "schema": { "type": "integer" } },
+          { "name": "status_max", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      },
+      "delete": {
+        "summary": "Clear captures for gateway",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted" } }
+      }
+    },
+    "/api/public/g/{name}/captures/{id}": {
+      "get": {
+        "summary": "Capture detail",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/stats": {
+      "get": {
+        "summary": "Gateway capture stats",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/export.ndjson": {
+      "get": {
+        "summary": "Export captures NDJSON",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "File" } }
+      }
+    },
+    "/api/public/g/{name}/export.har": {
+      "get": {
+        "summary": "Export captures HAR",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "File" } }
+      }
+    },
+    "/api/public/g/{name}/export.csv": {
+      "get": {
+        "summary": "Export captures CSV",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "File" } }
+      }
+    },
+    "/api/public/g/{name}/logs/stream": {
+      "get": {
+        "summary": "SSE gateway logs",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "service", "in": "query", "schema": { "type": "string", "enum": ["all", "openvpn", "tun2socks", "dnsproxy", "dnsmasq"] } },
+          { "name": "lines", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "text/event-stream" } }
+      }
+    },
+    "/api/public/g/{name}/analyze/info": {
+      "get": {
+        "summary": "Analyzer provider info",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/analyze": {
+      "get": {
+        "summary": "Rule-based analysis",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [
+          { "name": "name", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer" } },
+          { "name": "since_minutes", "in": "query", "schema": { "type": "integer" } },
+          { "name": "domain", "in": "query", "schema": { "type": "string" } },
+          { "name": "keyword", "in": "query", "schema": { "type": "string" } },
+          { "name": "app", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/analyze/models": {
+      "post": {
+        "summary": "List AI models for provider",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object", "properties": { "provider": { "type": "string" }, "apiKey": { "type": "string" }, "baseURL": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/analyze/auto-suggest": {
+      "post": {
+        "summary": "Auto-suggest AI model",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/analyze/ai": {
+      "post": {
+        "summary": "AI analysis summary",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/api/public/g/{name}/analyze/ai/stream": {
+      "post": {
+        "summary": "SSE AI analysis stream",
+        "security": [{ "ApiKeyAuth": [] }, { "AdminToken": [] }],
+        "parameters": [{ "name": "name", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": false, "content": { "application/json": { "schema": { "type": "object" } } } },
+        "responses": { "200": { "description": "text/event-stream" } }
+      }
+    },
+    "/api/mitm/cert.pem": {
+      "get": {
+        "summary": "Download CA cert PEM",
+        "responses": { "200": { "description": "File" } }
+      }
+    },
+    "/api/mitm/cert.cer": {
+      "get": {
+        "summary": "Download CA cert CER",
+        "responses": { "200": { "description": "File" } }
+      }
+    }
+  }
+}

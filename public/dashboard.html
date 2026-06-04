@@ -68,6 +68,15 @@
     .activity-item:last-child{border-bottom:none}
     .act-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
     .act-content{flex:1;min-width:0}.act-title{font-size:13px;font-weight:500}.act-time{font-size:11px;color:var(--t3);margin-top:2px}
+    .sys-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;padding:16px 20px}
+    .sys-item .k{font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+    .sys-item .v{font-size:14px;color:var(--t1);font-weight:600}
+    .sys-item .sub{font-size:11px;color:var(--t2);margin-top:4px}
+    .sys-bar{height:6px;background:var(--s3);border-radius:999px;overflow:hidden;margin-top:8px}
+    .sys-fill{height:100%;border-radius:999px;background:var(--gr);transition:width .2s ease;width:0}
+    .sys-fill.warn{background:var(--or)}
+    .sys-fill.crit{background:var(--rd)}
+    @media(max-width:920px){.sys-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -150,6 +159,41 @@
       </a>
     </div>
 
+    <!-- Server resources -->
+    <div class="card">
+      <div class="card-head">
+        <h2>🧠 Server Resources</h2>
+        <span class="text-xs text-dim" id="sys-updated">Updating…</span>
+      </div>
+      <div class="sys-grid">
+        <div class="sys-item">
+          <div class="k">CPU</div>
+          <div class="v" id="sys-cpu">—</div>
+          <div class="sub" id="sys-cpu-sub">Load avg: —</div>
+        </div>
+        <div class="sys-item">
+          <div class="k">Uptime</div>
+          <div class="v" id="sys-uptime">—</div>
+          <div class="sub">Auto-refresh mỗi 10 giây</div>
+        </div>
+        <div class="sys-item">
+          <div class="k">Memory</div>
+          <div class="v" id="sys-mem">—</div>
+          <div class="sys-bar"><div class="sys-fill" id="sys-mem-bar"></div></div>
+        </div>
+        <div class="sys-item">
+          <div class="k">Swap</div>
+          <div class="v" id="sys-swap">—</div>
+          <div class="sys-bar"><div class="sys-fill" id="sys-swap-bar"></div></div>
+        </div>
+        <div class="sys-item">
+          <div class="k">Disk (/)</div>
+          <div class="v" id="sys-disk">—</div>
+          <div class="sys-bar"><div class="sys-fill" id="sys-disk-bar"></div></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Tables row -->
     <div class="grid-2">
       <!-- Gateways -->
@@ -220,7 +264,63 @@
     return dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
   }
 
+  function fmtDuration(totalSec) {
+    const sec = Math.max(0, Number(totalSec || 0));
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  function meterClass(pct) {
+    if (pct >= 90) return 'sys-fill crit';
+    if (pct >= 70) return 'sys-fill warn';
+    return 'sys-fill';
+  }
+
+  function paintMeter(id, pct) {
+    const p = Math.max(0, Math.min(100, Number(pct || 0)));
+    const el = document.getElementById(id);
+    el.className = meterClass(p);
+    el.style.width = p + '%';
+  }
+
   function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+  async function loadSystemMetrics(silent = true) {
+    try {
+      const sys = await fetchApi('/api/admin/system');
+      const cpuPct = typeof sys.cpu?.usage_percent === 'number' ? `${sys.cpu.usage_percent.toFixed(1)}%` : 'Measuring…';
+      document.getElementById('sys-cpu').textContent = `${cpuPct} · ${sys.cpu?.cores || 1} core(s)`;
+      const l = Array.isArray(sys.loadavg) ? sys.loadavg.map(v => Number(v).toFixed(2)).join(' / ') : '—';
+      document.getElementById('sys-cpu-sub').textContent = `Load avg: ${l}`;
+      document.getElementById('sys-uptime').textContent = fmtDuration(sys.uptime_seconds);
+
+      const mem = sys.memory || {};
+      document.getElementById('sys-mem').textContent = `${fmtBytes(mem.used)} / ${fmtBytes(mem.total)} (${Number(mem.used_percent || 0).toFixed(1)}%)`;
+      paintMeter('sys-mem-bar', mem.used_percent || 0);
+
+      const swap = sys.swap || {};
+      if (swap.total > 0) {
+        document.getElementById('sys-swap').textContent = `${fmtBytes(swap.used)} / ${fmtBytes(swap.total)} (${Number(swap.used_percent || 0).toFixed(1)}%)`;
+      } else {
+        document.getElementById('sys-swap').textContent = 'Disabled';
+      }
+      paintMeter('sys-swap-bar', swap.used_percent || 0);
+
+      const disk = sys.disk || {};
+      document.getElementById('sys-disk').textContent = `${fmtBytes(disk.used)} / ${fmtBytes(disk.total)} (${Number(disk.used_percent || 0).toFixed(1)}%)`;
+      paintMeter('sys-disk-bar', disk.used_percent || 0);
+
+      const ts = sys.at ? new Date(sys.at) : new Date();
+      document.getElementById('sys-updated').textContent = `Updated ${ts.toLocaleTimeString()}`;
+    } catch(e) {
+      if (!silent) toast('Failed to load system metrics: ' + e.message, 'err');
+      document.getElementById('sys-updated').textContent = 'System metrics unavailable';
+    }
+  }
 
   async function loadDashboard() {
     try {
@@ -292,12 +392,15 @@
         }).join('');
       }
 
+      await loadSystemMetrics(true);
+
     } catch(e) {
       toast('Failed to load dashboard: ' + e.message, 'err');
     }
   }
 
   loadDashboard();
+  setInterval(() => { loadSystemMetrics(true); }, 10000);
 </script>
 </body>
 </html>

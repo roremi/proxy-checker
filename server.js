@@ -9,6 +9,7 @@ const { randomUUID } = require('crypto');
 const fs   = require('fs');
 const path = require('path');
 const http = require('http');
+const os = require('os');
 const captures = require('./captures');
 
 const app = express();
@@ -570,15 +571,8 @@ const WG_DIR     = '/etc/wireguard';
 const WG_DATA    = path.join(__dirname, 'vpn-clients.json');
 const SS_CONF    = '/etc/shadowsocks-libev/config.json';
 const SERVER_IP  = process.env.SERVER_IP || 'multiebay.com';
-const SERVER_IP_WG = (() => {
-  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(SERVER_IP)) return SERVER_IP;
-  try {
-    const ip = execSync(`getent ahostsv4 ${SERVER_IP} | awk 'NR==1{print $1}'`, { shell: '/bin/bash' }).toString().trim();
-    return ip || SERVER_IP;
-  } catch(_) {
-    return SERVER_IP;
-  }
-})();
+// Keep WireGuard endpoint as configured host (usually domain) to avoid exposing origin IP.
+const SERVER_IP_WG = SERVER_IP;
 const VPN_TOKEN  = process.env.VPN_TOKEN || 'vpnadmin2026';
 const PORT       = process.env.PORT || 3000;
 
@@ -1544,6 +1538,73 @@ function requireVpnToken(req, res, next) {
   next();
 }
 
+let _cpuPrevSample = null;
+
+function readCpuSample() {
+  const cpus = os.cpus() || [];
+  let idle = 0;
+  let total = 0;
+  for (const cpu of cpus) {
+    const t = cpu.times || {};
+    const cpuTotal = (t.user || 0) + (t.nice || 0) + (t.sys || 0) + (t.idle || 0) + (t.irq || 0);
+    idle += t.idle || 0;
+    total += cpuTotal;
+  }
+  return { idle, total, at: Date.now(), cores: cpus.length || 1 };
+}
+
+function readCpuUsagePercent() {
+  const cur = readCpuSample();
+  const prev = _cpuPrevSample;
+  _cpuPrevSample = cur;
+  if (!prev) return null;
+  const totalDelta = cur.total - prev.total;
+  const idleDelta = cur.idle - prev.idle;
+  if (totalDelta <= 0) return null;
+  const used = 100 * (1 - idleDelta / totalDelta);
+  return Number(Math.max(0, Math.min(100, used)).toFixed(1));
+}
+
+function readSwapInfoBytes() {
+  try {
+    const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+    const parse = (key) => {
+      const m = meminfo.match(new RegExp(`^${key}:\\s+(\\d+)\\s+kB$`, 'm'));
+      return m ? Number(m[1]) * 1024 : 0;
+    };
+    const total = parse('SwapTotal');
+    const free = parse('SwapFree');
+    return { total, used: Math.max(0, total - free), free };
+  } catch (_) {
+    return { total: 0, used: 0, free: 0 };
+  }
+}
+
+function readDiskUsageBytes() {
+  try {
+    const out = execSync('df -kP / | tail -n 1', {
+      shell: '/bin/bash',
+      timeout: 1500,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).toString().trim();
+    const parts = out.split(/\s+/);
+    if (parts.length < 6) throw new Error('Unexpected df output');
+    const total = Number(parts[1]) * 1024;
+    const used = Number(parts[2]) * 1024;
+    const free = Number(parts[3]) * 1024;
+    const usePercent = Number(String(parts[4]).replace('%', ''));
+    return {
+      mount: parts[5],
+      total,
+      used,
+      free,
+      used_percent: Number.isFinite(usePercent) ? usePercent : (total > 0 ? Number((used * 100 / total).toFixed(1)) : 0),
+    };
+  } catch (_) {
+    return { mount: '/', total: 0, used: 0, free: 0, used_percent: 0 };
+  }
+}
+
 // Per-gateway access check used by the public self-serve page (g.html).
 // Allows: (a) admin via x-vpn-token / ?token, OR
 //         (b) customer API key (x-api-key / ?api_key) that owns this gateway —
@@ -1625,6 +1686,39 @@ app.get('/api/admin/stats', requireVpnToken, (req, res) => {
     usage: { checks: totalChecks, bandwidth_bytes: totalBwBytes },
     server_ip: SERVER_IP,
     brand_name: settings.brand_name || 'VPN Panel',
+  });
+});
+
+// GET /api/admin/system — current server resource metrics
+app.get('/api/admin/system', requireVpnToken, (req, res) => {
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const usedMem = Math.max(0, totalMem - freeMem);
+  const memUsedPct = totalMem > 0 ? Number((usedMem * 100 / totalMem).toFixed(1)) : 0;
+  const swap = readSwapInfoBytes();
+  const swapUsedPct = swap.total > 0 ? Number((swap.used * 100 / swap.total).toFixed(1)) : 0;
+  const disk = readDiskUsageBytes();
+  res.json({
+    at: new Date().toISOString(),
+    uptime_seconds: Math.floor(os.uptime()),
+    loadavg: os.loadavg().map(v => Number(v.toFixed(2))),
+    cpu: {
+      cores: os.cpus()?.length || 1,
+      usage_percent: readCpuUsagePercent(),
+    },
+    memory: {
+      total: totalMem,
+      used: usedMem,
+      free: freeMem,
+      used_percent: memUsedPct,
+    },
+    swap: {
+      total: swap.total,
+      used: swap.used,
+      free: swap.free,
+      used_percent: swapUsedPct,
+    },
+    disk,
   });
 });
 
