@@ -4,18 +4,19 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Proxy to VPN</title>
 <style>
-:root{--bg:#0a0f1e;--sb:#060c18;--s1:#0d1525;--s2:#111e33;--s3:#16263e;--b1:#1a2f4a;--b2:#1f3a5a;--t1:#e4eaf4;--t2:#8fa8c8;--t3:#4a6080;--bl:#3d7ef8;--bl2:#6da0fa;--gr:#16c87a;--rd:#f04a4a;--or:#f59e0b;--pu:#9b74f5;--sw:220px}
+:root{--bg:#09090b;--sb:#000000;--s1:#141416;--s2:#27272a;--s3:#3f3f46;--b1:#27272a;--b2:#3f3f46;--t1:#fafafa;--t2:#a1a1aa;--t3:#71717a;--bl:#3b82f6;--bl2:#60a5fa;--gr:#10b981;--rd:#ef4444;--or:#f59e0b;--pu:#8b5cf6;--sw:220px}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--t1);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;display:flex;min-height:100vh}
+body{background:var(--bg);color:var(--t1);font-family:'Inter',-apple-system,sans-serif;font-size:14px;letter-spacing:-0.01em;display:flex;min-height:100vh}
 a{text-decoration:none;color:inherit}
 /* Sidebar */
-.sb{width:var(--sw);flex-shrink:0;background:var(--sb);border-right:1px solid var(--b1);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:50}
-.sb-logo{padding:18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--b1)}
-.sb-icon{width:36px;height:36px;background:linear-gradient(135deg,#3d7ef8,#9b74f5);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 12px rgba(61,126,248,.3)}
+.sb{width:var(--sw);flex-shrink:0;background:var(--sb);border-right:1px solid rgba(255,255,255,0.05);display:flex;flex-direction:column;position:fixed;height:100vh;z-index:50}
+.sb-logo{padding:18px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.05)}
+.sb-icon{width:36px;height:36px;background:linear-gradient(135deg,#60a5fa,#3b82f6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 4px 16px rgba(59,130,246,.3), inset 0 1px 0 rgba(255,255,255,0.2)}
 .sb-name{font-weight:700;font-size:14px;line-height:1.2}.sb-ver{font-size:10px;color:var(--t3);margin-top:1px}
 .sb-nav{flex:1;padding:10px 8px;overflow-y:auto}
 .nav-sep{font-size:10px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:10px 8px 4px}
-.nav-a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;color:var(--t2);font-size:13px;font-weight:500;margin-bottom:1px;transition:.15s;cursor:pointer;border:1px solid transparent}
+.nav-a{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;color:var(--t2);font-size:13px;font-weight:500;margin-bottom:1px;transition:.15s;cursor:pointer;border:1px solid transparent}
 .nav-a:hover{background:var(--s2);color:var(--t1)}.nav-a.active{background:rgba(61,126,248,.12);color:var(--bl2);border-color:rgba(61,126,248,.18)}
 .nav-a svg{width:16px;height:16px;flex-shrink:0;opacity:.7}.nav-a.active svg{opacity:1}
 .nav-a.hidden{display:none!important}
@@ -34,9 +35,9 @@ a{text-decoration:none;color:inherit}
 .content{padding:24px 28px;flex:1}
 .section{display:none}.section.active{display:block}
 /* Cards */
-.card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin-bottom:14px;overflow:hidden}
-.card-head{padding:13px 18px;border-bottom:1px solid var(--b1);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.card-head h2{font-size:13px;font-weight:700;flex:1}
+.card{background:linear-gradient(180deg, var(--s1), #121214);border:1px solid rgba(255,255,255,0.05);border-radius:16px;box-shadow:0 12px 40px -8px rgba(0,0,0,0.6);margin-bottom:14px;overflow:hidden}
+.card-head{padding:16px 20px;background:transparent;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.card-head h2{font-size:14px;font-weight:700;flex:1}
 .card-body{padding:18px}
 /* Hero */
 .hero{background:linear-gradient(135deg,rgba(61,126,248,.08),rgba(155,116,245,.06));border:1px solid rgba(61,126,248,.15);border-radius:14px;padding:24px;margin-bottom:16px}
@@ -50,7 +51,7 @@ a{text-decoration:none;color:inherit}
 .step-arrow{display:flex;align-items:center;padding:0 6px;color:var(--t3);font-size:16px;align-self:center;flex-shrink:0}
 /* Stats */
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px}
-.stat-card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:16px 18px}
+.stat-card{background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:16px 18px}
 .stat-card .v{font-size:24px;font-weight:800;margin-bottom:3px}
 .stat-card .l{font-size:11px;color:var(--t3);text-transform:uppercase;font-weight:600}
 /* Table */
@@ -59,18 +60,19 @@ th{padding:8px 14px;text-align:left;font-size:10px;color:var(--t3);font-weight:6
 td{padding:9px 14px;font-size:13px;border-bottom:1px solid rgba(26,47,74,.5);vertical-align:middle}
 tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
 /* Buttons */
-.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid var(--b1);background:var(--s2);color:var(--t1);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:.15s;font-family:inherit;white-space:nowrap}
-.btn:hover{background:var(--s3);border-color:var(--b2)}.btn:disabled{opacity:.5;cursor:not-allowed}
-.btn-primary{background:var(--bl);border-color:var(--bl);color:#fff}.btn-primary:hover{opacity:.9}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border:1px solid rgba(255,255,255,0.08);background:var(--s2);color:var(--t1);border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,0.3);transition:.2s cubic-bezier(0.4,0,0.2,1);font-family:inherit;white-space:nowrap}
+.btn:hover{background:var(--s3);border-color:rgba(255,255,255,0.15);transform:translateY(-1px)}.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:linear-gradient(180deg, #60a5fa, #3b82f6);border:1px solid transparent;color:#fff;box-shadow:0 4px 12px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.3);text-shadow:0 1px 1px rgba(0,0,0,0.2)}.btn-primary:hover{box-shadow:0 6px 16px rgba(59,130,246,0.6), inset 0 1px 0 rgba(255,255,255,0.3);filter:brightness(1.1)}
 .btn-danger{border-color:rgba(240,74,74,.25);color:var(--rd)}.btn-danger:hover{background:rgba(240,74,74,.1)}
 .btn-green{border-color:rgba(22,200,122,.25);color:var(--gr)}.btn-green:hover{background:rgba(22,200,122,.1)}
 .btn-warn{border-color:rgba(245,158,11,.25);color:var(--or)}.btn-warn:hover{background:rgba(245,158,11,.1)}
 .btn-purple{border-color:rgba(155,116,245,.25);color:var(--pu)}.btn-purple:hover{background:rgba(155,116,245,.1)}
-.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px}.btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:10px}.btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
 .btn-row{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
 /* Forms */
 .fg{margin-bottom:14px}.fg label{display:block;font-size:11px;color:var(--t2);font-weight:600;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
-input[type=text],input[type=password],input[type=number],select,textarea{width:100%;background:var(--s2);border:1px solid var(--b1);color:var(--t1);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;transition:.15s;font-family:inherit}
+input[type=text],input[type=password],input[type=number],select,textarea{width:100%;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.25);box-shadow:inset 0 1px 3px rgba(0,0,0,0.3);color:var(--t1);padding:8px 11px;font-size:13px;outline:none;transition:.2s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--bl);box-shadow:0 0 0 3px rgba(59,130,246,0.2),inset 0 1px 2px rgba(0,0,0,0.3);background:rgba(0,0,0,0.4)}
 input:focus,select:focus,textarea:focus{border-color:var(--bl);box-shadow:0 0 0 3px rgba(61,126,248,.1)}
 ::placeholder{color:var(--t3)}
 textarea{resize:vertical}
@@ -82,15 +84,15 @@ textarea{resize:vertical}
 .infobox .lbl{font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-bottom:3px}
 .infobox .val{font-family:monospace;font-size:13px;font-weight:700;word-break:break-all}
 /* Key box */
-.key-box{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-family:monospace;font-size:11px;word-break:break-all;color:var(--bl2);line-height:1.5;max-height:200px;overflow-y:auto;white-space:pre-wrap}
+.key-box{background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px;font-family:monospace;font-size:11px;word-break:break-all;color:var(--bl2);line-height:1.5;max-height:200px;overflow-y:auto;white-space:pre-wrap}
 /* Proxy VPN card */
-.pvpn-card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.pvpn-card{background:var(--s1);border:1px solid var(--b1);border-radius:10px;margin-bottom:12px;overflow:hidden}
 .pvpn-head{padding:14px 18px;border-bottom:1px solid var(--b1);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .pvpn-head-info{flex:1;min-width:0}
 .pvpn-name{font-size:14px;font-weight:700;margin-bottom:2px}
 .pvpn-proxy{font-family:monospace;font-size:11px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
 .pvpn-body{padding:16px 18px}
-.clients-table-wrap{border:1px solid var(--b1);border-radius:8px;overflow:hidden;margin-top:10px}
+.clients-table-wrap{border:1px solid var(--b1);border-radius:10px;overflow:hidden;margin-top:10px}
 /* Cred card */
 .cred-card{background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:14px 16px;margin-bottom:10px}
 .cred-card h4{font-size:13px;font-weight:700;margin-bottom:10px}
@@ -103,7 +105,7 @@ textarea{resize:vertical}
 .modal{background:var(--s1);border:1px solid var(--b2);border-radius:14px;width:100%;max-width:520px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
 .modal-head{padding:16px 20px;border-bottom:1px solid var(--b1);flex-shrink:0;display:flex;align-items:center;justify-content:space-between}
 .modal-head h3{font-size:14px;font-weight:700}
-.close-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px;cursor:pointer;color:var(--t3);background:none;border:none;font-size:20px;transition:.15s}
+.close-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:10px;cursor:pointer;color:var(--t3);background:none;border:none;font-size:20px;transition:.15s}
 .close-btn:hover{background:var(--s2);color:var(--t1)}
 .modal-body{padding:20px;overflow-y:auto;flex:1}
 .modal-foot{padding:12px 20px;border-top:1px solid var(--b1);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0}
@@ -120,14 +122,14 @@ textarea{resize:vertical}
 .chk-g2{display:grid;grid-template-columns:1fr 260px;gap:16px}
 @media(max-width:760px){.chk-g2{grid-template-columns:1fr}}
 .chk-lbl{font-size:11px;font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
-#proxy-input.chk-ta{width:100%;height:164px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-family:monospace;font-size:12px;padding:10px 12px;resize:vertical;outline:none}
+#proxy-input.chk-ta{width:100%;height:164px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-family:monospace;font-size:12px;padding:10px 12px;resize:vertical;outline:none}
 #proxy-input.chk-ta:focus{border-color:var(--bl)}
 .chk-field{margin-bottom:10px}
 .chk-field label{display:block;font-size:12px;color:var(--t2);margin-bottom:4px}
-.chk-field input{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:8px;color:var(--t1);font-size:13px;padding:7px 10px;outline:none}
+.chk-field input{width:100%;background:var(--s2);border:1px solid var(--b1);border-radius:10px;color:var(--t1);font-size:13px;padding:7px 10px;outline:none}
 .chk-field input:focus{border-color:var(--bl)}
 .flt-active-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--bl);color:#fff;font-size:10px;font-weight:700;margin-left:4px}
-.flt-panel{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:none}
+.flt-panel{background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:none}
 .flt-panel.open{display:block}
 .flt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-items:end}
 .flt-group{display:flex;flex-direction:column;gap:3px}
@@ -138,7 +140,7 @@ textarea{resize:vertical}
 .flt-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;border:1px solid var(--b1);background:transparent;color:var(--t2);font-size:11px;cursor:pointer;user-select:none}
 .flt-chip input{margin:0;cursor:pointer;accent-color:var(--bl)}
 .flt-chip:has(input:checked){border-color:var(--bl);background:rgba(61,126,248,.1);color:var(--bl2)}
-.tbl-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--b1)}
+.tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--b1)}
 .tbl-wrap table{font-size:13px}
 .tbl-wrap thead{position:sticky;top:0;z-index:10}
 .tbl-wrap thead th{background:var(--s2);color:var(--t2);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:9px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--b1)}
@@ -146,7 +148,7 @@ textarea{resize:vertical}
 .tbl-wrap tbody tr:hover,.tbl-wrap tbody tr.exp{background:var(--s2)}
 .tbl-wrap td{padding:7px 10px;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;font-size:13px;border:none}
 .tbl-wrap td.mono{font-family:monospace;font-size:11px}
-.chk-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;border:1px solid}
+.chk-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;border:1px solid}
 .chk-badge.ok{background:rgba(22,200,122,.12);color:var(--gr);border-color:rgba(22,200,122,.25)}
 .chk-badge.err{background:rgba(240,74,74,.12);color:var(--rd);border-color:rgba(240,74,74,.25)}
 .os{display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px;font-weight:500}
@@ -170,7 +172,7 @@ textarea{resize:vertical}
 .sc-flag{display:inline-block;font-size:10px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:600}
 .sc-yes{background:rgba(240,74,74,.15);color:var(--rd)}
 .sc-no{background:rgba(22,200,122,.1);color:var(--gr)}
-.lib-panel{background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:14px 16px;margin-top:10px}
+.lib-panel{background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:14px 16px;margin-top:10px}
 .lib-header{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .lib-title{font-size:12px;font-weight:700;color:var(--t1)}
 .lib-list{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto}
@@ -183,7 +185,7 @@ textarea{resize:vertical}
 .lib-del:hover{opacity:1;color:var(--rd)}
 .lib-empty{text-align:center;padding:20px;color:var(--t2);font-size:12px}
 /* Setup instructions */
-.setup-box{background:var(--s3);border:1px solid var(--b2);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--t2);line-height:1.9;margin-top:10px}
+.setup-box{background:var(--s3);border:1px solid var(--b2);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--t2);line-height:1.9;margin-top:10px}
 .setup-box strong{color:var(--t1)}
 /* Misc */
 .empty{text-align:center;padding:36px;color:var(--t3);font-size:13px}
@@ -191,7 +193,7 @@ textarea{resize:vertical}
 .text-green{color:var(--gr)}.text-blue{color:var(--bl2)}.text-orange{color:var(--or)}.text-purple{color:var(--pu)}
 .mono{font-family:monospace;font-size:12px}
 .hint{font-size:11px;color:var(--t3);margin-top:4px;line-height:1.6}
-.alert{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
+.alert{padding:10px 14px;border-radius:10px;font-size:13px;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
 .alert-info{background:rgba(61,126,248,.08);border:1px solid rgba(61,126,248,.2);color:var(--bl2)}
 .alert-ok{background:rgba(22,200,122,.08);border:1px solid rgba(22,200,122,.2);color:var(--gr)}
 .alert-err{background:rgba(240,74,74,.08);border:1px solid rgba(240,74,74,.2);color:var(--rd)}
@@ -199,11 +201,11 @@ textarea{resize:vertical}
 .toast-wrap{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;max-width:360px}
 .toast{background:var(--s2);border:1px solid var(--b2);color:var(--t1);padding:11px 16px;border-radius:10px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);transition:.25s all;pointer-events:auto}
 .toast.show{opacity:1;transform:translateY(0)}.toast.err{border-color:rgba(240,74,74,.4)}.toast.ok{border-color:rgba(22,200,122,.3)}
-::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:4px}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--b2);border-radius:10px}
 /* Skeleton loader */
 @keyframes shimmer{0%{background-position:-600px 0}100%{background-position:600px 0}}
-.skeleton{background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 30%,var(--s2) 60%);background-size:600px 100%;animation:shimmer 1.4s ease-in-out infinite;border-radius:6px}
-.skel-card{background:var(--s1);border:1px solid var(--b1);border-radius:12px;padding:20px;margin-bottom:12px}
+.skeleton{background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 30%,var(--s2) 60%);background-size:600px 100%;animation:shimmer 1.4s ease-in-out infinite;border-radius:10px}
+.skel-card{background:var(--s1);border:1px solid var(--b1);border-radius:10px;padding:20px;margin-bottom:12px}
 .skel-row{height:12px;margin-bottom:10px}.skel-row.w100{width:100%}.skel-row.w60{width:60%}.skel-row.w40{width:40%}.skel-row.w30{width:30%}
 .skel-tag{height:10px;width:70px;display:inline-block;border-radius:20px;margin-right:6px}
 .skel-btn{height:28px;width:90px;border-radius:7px;display:inline-block}
@@ -327,7 +329,7 @@ textarea{resize:vertical}
             <button class="btn btn-sm" onclick="toggleKey()">Show</button>
             <button class="btn btn-sm" onclick="copyKey()">&#128203; Copy</button>
           </div>
-          <p class="hint">Use header <code style="background:var(--s3);padding:1px 6px;border-radius:4px;font-family:monospace">x-api-key: &lt;key&gt;</code> to access APIs directly.</p>
+          <p class="hint">Use header <code style="background:var(--s3);padding:1px 6px;border-radius:10px;font-family:monospace">x-api-key: &lt;key&gt;</code> to access APIs directly.</p>
         </div>
       </div>
       <div class="card">
@@ -640,7 +642,7 @@ textarea{resize:vertical}
       <div id="ovm-clients"><div class="text-xs text-dim">Loading&#8230;</div></div>
       <div style="height:1px;background:var(--b1);margin:14px 0"></div>
       <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">How to Connect</div>
-      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-size:12px;line-height:1.8">
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px;font-size:12px;line-height:1.8">
         <strong>All platforms:</strong> Install <span style="color:var(--bl2)">OpenVPN Connect</span> (free) from openvpn.net/client, then import the .ovpn file.<br>
         <strong>iOS / Android:</strong> OpenVPN Connect &rarr; <strong>+</strong> &rarr; Import from file<br>
         <strong>Windows / macOS:</strong> OpenVPN Connect &rarr; Import Profile &rarr; Browse<br>
@@ -662,7 +664,7 @@ textarea{resize:vertical}
         <button class="btn btn-primary btn-sm" id="wgm-gen-btn" onclick="wgmCreate()">Generate .conf</button>
       </div>
       <div id="wgm-result" style="display:none">
-        <div style="display:flex;justify-content:center;margin-bottom:10px"><img id="wgm-qr" alt="WireGuard QR" style="max-width:180px;border-radius:8px;border:1px solid var(--b1)"></div>
+        <div style="display:flex;justify-content:center;margin-bottom:10px"><img id="wgm-qr" alt="WireGuard QR" style="max-width:180px;border-radius:10px;border:1px solid var(--b1)"></div>
         <div class="key-box" id="wgm-conf" style="max-height:160px;overflow:auto"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 14px">
           <button class="btn btn-primary btn-sm" onclick="wgmDownload()">&#11015; Download .conf</button>
@@ -674,7 +676,7 @@ textarea{resize:vertical}
       <div id="wgm-clients"><div class="text-xs text-dim">Loading&#8230;</div></div>
       <div style="height:1px;background:var(--b1);margin:14px 0"></div>
       <div class="text-xs text-dim" style="font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">How to Connect</div>
-      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-size:12px;line-height:1.8">
+      <div style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px;font-size:12px;line-height:1.8">
         <strong>iOS / Android:</strong> Install WireGuard app, tap <strong>+</strong>, scan QR or import .conf file.<br>
         <strong>Windows / macOS:</strong> Install WireGuard app, click <strong>Import tunnel(s) from file</strong>.<br>
         <strong>Linux:</strong> <code style="background:rgba(61,126,248,.1);color:var(--bl2);padding:1px 5px;border-radius:3px">wg-quick up yourfile.conf</code>
@@ -706,7 +708,7 @@ textarea{resize:vertical}
           <button class="btn btn-xs" data-l2tab="windows" onclick="l2mTab('windows')">Windows</button>
           <button class="btn btn-xs" data-l2tab="macos" onclick="l2mTab('macos')">macOS</button>
         </div>
-        <div id="l2m-guide" style="background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:12px;font-size:12px;line-height:1.8"></div>
+        <div id="l2m-guide" style="background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:12px;font-size:12px;line-height:1.8"></div>
       </div>
     </div>
     <div class="modal-foot"><button class="btn btn-sm" onclick="closeL2tpModal()">Close</button></div>
@@ -815,7 +817,7 @@ async function loadUsage(){
     } else {
       const limit = u.limit_bytes || 0;
       const pct = limit ? Math.min(100, (u.total_bytes/limit)*100) : 0;
-      const bar = limit ? `<div class="prog" style="margin-top:8px;height:8px;background:var(--s3);border-radius:4px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${pct>90?'var(--rd)':pct>70?'var(--or)':'var(--gr)'}"></div></div><div class="text-xs text-dim" style="margin-top:4px">${fmtBytes(u.total_bytes)} of ${fmtBytes(limit)} (${pct.toFixed(1)}%)</div>` : '';
+      const bar = limit ? `<div class="prog" style="margin-top:8px;height:8px;background:var(--s3);border-radius:10px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${pct>90?'var(--rd)':pct>70?'var(--or)':'var(--gr)'}"></div></div><div class="text-xs text-dim" style="margin-top:4px">${fmtBytes(u.total_bytes)} of ${fmtBytes(limit)} (${pct.toFixed(1)}%)</div>` : '';
       const rows = u.gateways.map(g => `
         <tr>
           <td><b>${esc(g.name)}</b> ${g.running?'<span class="badge bg" style="font-size:10px;margin-left:4px">running</span>':'<span class="badge br" style="font-size:10px;margin-left:4px">stopped</span>'}</td>
@@ -1180,7 +1182,7 @@ async function ovmLoadClients(){
     const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(_ovmGw)}/clients`);
     const clients = d.clients||[];
     if (!clients.length){ el.innerHTML = '<div class="text-xs text-dim" style="padding:6px 0">No clients yet.</div>'; return; }
-    el.innerHTML = clients.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:6px">
+    el.innerHTML = clients.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;margin-bottom:6px">
       <div style="flex:1">
         <div style="font-family:monospace;font-size:12px;font-weight:700;color:var(--gr)">${esc(c.client_name)}</div>
         <div class="text-xs text-dim" style="font-family:monospace;margin-top:2px">${esc(c.cert_name)}</div>
@@ -1250,7 +1252,7 @@ async function wgmLoadClients(){
     const d = await fetchC(`/api/customer/gateway/${encodeURIComponent(_wgmGw)}/wg-clients`);
     const clients = d.clients || [];
     if (!clients.length){ el.innerHTML = '<div class="text-xs text-dim" style="padding:6px 0">No clients yet.</div>'; return; }
-    el.innerHTML = clients.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:8px;margin-bottom:6px">
+    el.innerHTML = clients.map(c=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--s2);border:1px solid var(--b1);border-radius:10px;margin-bottom:6px">
       <div style="flex:1">
         <div style="font-family:monospace;font-size:12px;font-weight:700;color:var(--gr)">${esc(c.client_name)}</div>
         <div class="text-xs text-dim" style="font-family:monospace;margin-top:2px">${esc(c.wg_name)} ${c.ip?`(${esc(c.ip)})`:''}</div>
@@ -1317,7 +1319,7 @@ function l2mRender(d){
   document.getElementById('l2m-psk').textContent = d.psk || '?';
   const users = d.users || [];
   document.getElementById('l2m-users').innerHTML = users.length ? users.map(u=>`
-    <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--b1);border-radius:8px;padding:10px 14px;margin-bottom:8px">
+    <div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:center;background:var(--s2);border:1px solid var(--b1);border-radius:10px;padding:10px 14px;margin-bottom:8px">
       <div><div class="lbl" style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Username</div><div class="val" style="color:var(--gr);font-family:monospace;font-size:12px;font-weight:700">${esc(u.chap_name||u.username)}</div></div>
       <div><div class="lbl" style="font-size:10px;color:var(--t3);text-transform:uppercase;font-weight:600;margin-bottom:3px">Password</div><div class="val" style="color:var(--or);font-family:monospace;font-size:12px;font-weight:700">${esc(u.password)}</div></div>
       <button class="btn btn-xs" title="Copy creds" onclick="l2mCopyUser('${esc(u.username||u.chap_name)}')">&#128203;</button>
@@ -1455,12 +1457,12 @@ function switchGuide(id,btn){
   ['gw','gm','gi','ga','gl'].forEach(k=>{ const e=document.getElementById('g-'+k); if(e) e.style.display=k===id?'block':'none'; });
 }
 function guideStep(n,title,body){ return `<div style="display:flex;gap:12px;margin-bottom:14px;padding:14px;background:var(--s1);border:1px solid var(--b1);border-radius:10px"><div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--bl),var(--pu));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0">${n}</div><div><div style="font-size:13px;font-weight:700;margin-bottom:4px">${title}</div><div style="font-size:12px;color:var(--t2);line-height:1.7">${body}</div></div></div>`; }
-function codeInline(s){ return `<code style="background:var(--s3);border:1px solid var(--b2);padding:1px 6px;border-radius:4px;font-family:monospace;font-size:12px;color:var(--bl2)">${s}</code>`; }
+function codeInline(s){ return `<code style="background:var(--s3);border:1px solid var(--b2);padding:1px 6px;border-radius:10px;font-family:monospace;font-size:12px;color:var(--bl2)">${s}</code>`; }
 function windowsGuide(){ return guideStep(1,'Download OpenVPN GUI','Visit <a href="https://openvpn.net/community-downloads/" target="_blank" style="color:var(--bl2)">openvpn.net</a> and install the Windows client (free).')+guideStep(2,'Add a proxy tunnel','In this portal: <b>My Proxies → VPN</b> → click <b>+ Add Proxy</b>, paste your proxy URL, click Create.')+guideStep(3,'Download .ovpn config','After tunnel is created, click the download icon on the VPN config you want. A '+codeInline('.ovpn')+' file is saved.')+guideStep(4,'Import & Connect','Right-click the OpenVPN tray icon → <b>Import file</b> → select the .ovpn → then click <b>Connect</b>.'); }
 function macGuide(){ return guideStep(1,'Install Tunnelblick','Download <a href="https://tunnelblick.net" target="_blank" style="color:var(--bl2)">Tunnelblick</a> (free OpenVPN client for macOS).')+guideStep(2,'Create tunnel & download config','Portal → <b>My Proxies → VPN</b> → Add Proxy → Download '+codeInline('.ovpn')+'.')+guideStep(3,'Install config','Double-click the .ovpn file — Tunnelblick imports it automatically.')+guideStep(4,'Connect','Click Tunnelblick in the menu bar → select your VPN → Connect.'); }
 function iosGuide(){ return guideStep(1,'Install OpenVPN Connect','Get <b>OpenVPN Connect</b> from the App Store (free).')+guideStep(2,'Download config to iPhone','Open portal in Safari → download .ovpn → when prompted choose <b>Share → OpenVPN</b>.')+guideStep(3,'Add profile','In OpenVPN Connect tap <b>+</b> → <b>Import from Files</b> → select .ovpn → tap Add.')+guideStep(4,'Connect','Toggle the connection. Allow VPN config when iOS asks.'); }
 function androidGuide(){ return guideStep(1,'Install OpenVPN for Android','Install <b>OpenVPN for Android</b> from Google Play (free).')+guideStep(2,'Download config','Portal → download .ovpn → saved to Downloads folder.')+guideStep(3,'Import','Open app → tap <b>Import</b> → browse Downloads → select .ovpn.')+guideStep(4,'Connect','Tap connect. Allow VPN when Android prompts.'); }
-function l2tpGuide(){ return `<div style="padding:12px 14px;background:rgba(155,116,245,.07);border:1px solid rgba(155,116,245,.2);border-radius:8px;font-size:12px;color:var(--t2);margin-bottom:16px">&#9432; First, get your L2TP credentials: <b>L2TP / IPSec</b> tab → select a tunnel → copy Server IP, PSK, username & password.</div>`+guideStep('W','Windows','Settings → Network → VPN → <b>Add VPN</b> → Provider: Windows built-in → Type: <b>L2TP/IPsec with pre-shared key</b> → enter Server, PSK, Username, Password.')+guideStep('&#63743;','iPhone / iPad / macOS','Settings → General → VPN → <b>Add VPN Configuration</b> → Type: <b>L2TP</b> → Server, Account, Password, Secret (PSK).')+guideStep('A','Android','Settings → Network → VPN → <b>+</b> → Type: <b>L2TP/IPSec PSK</b> → Server, pre-shared key, Username, Password.'); }
+function l2tpGuide(){ return `<div style="padding:12px 14px;background:rgba(155,116,245,.07);border:1px solid rgba(155,116,245,.2);border-radius:10px;font-size:12px;color:var(--t2);margin-bottom:16px">&#9432; First, get your L2TP credentials: <b>L2TP / IPSec</b> tab → select a tunnel → copy Server IP, PSK, username & password.</div>`+guideStep('W','Windows','Settings → Network → VPN → <b>Add VPN</b> → Provider: Windows built-in → Type: <b>L2TP/IPsec with pre-shared key</b> → enter Server, PSK, Username, Password.')+guideStep('&#63743;','iPhone / iPad / macOS','Settings → General → VPN → <b>Add VPN Configuration</b> → Type: <b>L2TP</b> → Server, Account, Password, Secret (PSK).')+guideStep('A','Android','Settings → Network → VPN → <b>+</b> → Type: <b>L2TP/IPSec PSK</b> → Server, pre-shared key, Username, Password.'); }
 
 // Close modals on backdrop click
 ['add-proxy-modal','change-proxy-modal','new-client-modal','redown-modal','ovpn-modal','wg-modal','l2tp-modal'].forEach(id=>{
