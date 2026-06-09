@@ -149,15 +149,11 @@ async function detectAndTestProxy(rawInput) {
   const order = forced
     ? [forced === 'http' || forced === 'https' ? 'http' : 'socks5']
     : ['socks5', 'http'];
-  // Try multiple IP-echo endpoints over both HTTPS and plain HTTP.
-  // Some proxies (port-restricted / cheap residential) only allow port 80,
-  // or block specific hosts (e.g. api.ipify.org). Fall back gracefully.
+  // Keep the live test short so gateway creation does not hit nginx timeouts.
+  // We only probe the most reliable echo endpoints instead of iterating many fallbacks.
   const TEST_URLS = [
     'https://api.ipify.org?format=json',
     'http://api.ipify.org/?format=json',
-    'https://ifconfig.me/ip',
-    'http://ifconfig.me/ip',
-    'http://ip-api.com/json/?fields=query',
   ];
   const errs = [];
   for (const sch of order) {
@@ -167,7 +163,7 @@ async function detectAndTestProxy(rawInput) {
       try {
         const agent = sch === 'socks5' ? new SocksProxyAgent(url) : new HttpsProxyAgent(url);
         const r = await axios.get(testUrl, {
-          httpsAgent: agent, httpAgent: agent, timeout: 15000,
+          httpsAgent: agent, httpAgent: agent, timeout: 7000,
           responseType: 'text', transformResponse: [d => d],
         });
         const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
@@ -1324,88 +1320,88 @@ app.post('/api/customer/proxy', requireApiKey(), async (req, res) => {
   const k = req.apiKey;
   const { proxy_url, allow_http_proxy } = req.body;
   if (!proxy_url) return res.status(400).json({ error: 'proxy_url required' });
-  // Auto-generate unique gateway name from key prefix + index
+
   const keys = keysLoad();
-  const keyPrefix = k.id.replace(/-/g,'').slice(0,6);
+  const keyPrefix = k.id.replace(/-/g, '').slice(0, 6);
   const myGws = keys[k.id].my_gateways || [];
   const gwIndex = myGws.length + 1;
   const name = `c${keyPrefix}${gwIndex}`;
   const gateways = gwLoad();
   if (gateways[name]) {
-    // Try incrementing
     let idx = gwIndex + 1;
     while (gateways[`c${keyPrefix}${idx}`] && idx < 100) idx++;
     if (idx >= 100) return res.status(429).json({ error: 'Too many gateways' });
   }
-  const finalName = gateways[name] ? `c${keyPrefix}${(() => { let i=gwIndex+1; while(gateways[`c${keyPrefix}${i}`]&&i<100)i++; return i; })()}` : name;
-  try {
-    // Re-use admin gateway creation via internal HTTP call (keeps logic DRY)
-    const settings = settingsLoad();
-    const token = settings.admin_password || VPN_TOKEN;
-    const r = await fetch(`http://127.0.0.1:${PORT}/api/gateways`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-vpn-token': token },
-      body: JSON.stringify({ name: finalName, proxy_url, allow_http_proxy }),
-    });
-    const d = await r.json();
-    if (!r.ok) return res.status(r.status).json(d);
-    // Track ownership
-    if (!keys[k.id].my_gateways) keys[k.id].my_gateways = [];
+  const finalName = gateways[name] ? `c${keyPrefix}${(() => { let i = gwIndex + 1; while (gateways[`c${keyPrefix}${i}`] && i < 100) i++; return i; })()}` : name;
+
+  if (!keys[k.id].my_gateways) keys[k.id].my_gateways = [];
+  if (!keys[k.id].my_gateways.includes(finalName)) {
     keys[k.id].my_gateways.push(finalName);
     keysSave(keys);
-    // Auto-generate OpenVPN + WireGuard default clients for this key on the new gateway
-    const gateways2 = gwLoad();
-    const gw2 = gateways2[finalName];
-    if (gw2) {
-      const certName = `${finalName}_${keyPrefix}_default`;
-      try {
-        execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-req ${certName} nopass 2>&1`, { shell: '/bin/bash' });
-        execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa sign-req client ${certName} 2>&1`, { shell: '/bin/bash' });
-        const ovpn = buildOvpn(gw2, certName);
-        const keys2 = keysLoad();
-        if (!keys2[k.id].vpn_clients) keys2[k.id].vpn_clients = [];
-        keys2[k.id].vpn_clients.push({ gateway: finalName, client_name: 'default', cert_name: certName, created_at: new Date().toISOString() });
-        let wgConf = '';
-        let wgName = '';
-        let wgIp = '';
-        try {
-          wgName = `${finalName}_${keyPrefix}_default_wg`.slice(0, 48);
-          const wgCreated = wgCreateClient(wgName, finalName);
-          wgConf = wgCreated.conf || '';
-          wgIp = wgCreated.ip || '';
-          if (!keys2[k.id].wg_clients) keys2[k.id].wg_clients = [];
-          keys2[k.id].wg_clients.push({
-            gateway: finalName,
-            client_name: 'default',
-            wg_name: wgName,
-            ip: wgIp,
-            created_at: new Date().toISOString(),
-          });
-        } catch (_) {}
-        keysSave(keys2);
-        return res.status(201).json({
-          ok: true,
-          gateway: finalName,
-          vpn_port: d.vpn_port,
-          exit_ip: d.exit_ip,
-          ovpn,
-          cert_name: certName,
-          wg_conf: wgConf || undefined,
-          wg_name: wgName || undefined,
-          wg_ip: wgIp || undefined,
-        });
-      } catch(e) {
-        return res.status(201).json({ ok: true, gateway: finalName, vpn_port: d.vpn_port, exit_ip: d.exit_ip, ovpn_error: e.message });
+  }
+
+  res.status(202).json({
+    ok: true,
+    gateway: finalName,
+    queued: true,
+    clients_pending: true,
+    note: 'Gateway build started in background to avoid request timeout.',
+  });
+
+  setImmediate(async () => {
+    try {
+      const settings = settingsLoad();
+      const token = settings.admin_password || VPN_TOKEN;
+      const r = await fetch(`http://127.0.0.1:${PORT}/api/gateways`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-vpn-token': token },
+        body: JSON.stringify({ name: finalName, proxy_url, allow_http_proxy }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        console.warn('[customer proxy gateway build]', d.error || r.statusText);
+        return;
       }
+
+      const gateways2 = gwLoad();
+      const gw2 = gateways2[finalName];
+      if (!gw2) return;
+
+      const certName = `${finalName}_${keyPrefix}_default`;
+      execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-req ${certName} nopass 2>&1`, { shell: '/bin/bash' });
+      execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa sign-req client ${certName} 2>&1`, { shell: '/bin/bash' });
+
+      const keys2 = keysLoad();
+      if (!keys2[k.id].vpn_clients) keys2[k.id].vpn_clients = [];
+      keys2[k.id].vpn_clients.push({ gateway: finalName, client_name: 'default', cert_name: certName, created_at: new Date().toISOString() });
+
+      try {
+        const wgName = `${finalName}_${keyPrefix}_default_wg`.slice(0, 48);
+        const wgCreated = wgCreateClient(wgName, finalName);
+        if (!keys2[k.id].wg_clients) keys2[k.id].wg_clients = [];
+        keys2[k.id].wg_clients.push({
+          gateway: finalName,
+          client_name: 'default',
+          wg_name: wgName,
+          ip: wgCreated.ip || '',
+          created_at: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn('[customer proxy wg client]', e.message);
+      }
+
+      keysSave(keys2);
+      console.info(`[customer proxy] default clients ready for ${finalName}`);
+    } catch (e) {
+      console.warn('[customer proxy default clients]', e.message);
     }
-    res.status(201).json({ ok: true, gateway: finalName, vpn_port: d.vpn_port, exit_ip: d.exit_ip });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  });
 });
 
 // DELETE /api/customer/proxy/:name — delete a customer-owned gateway (any valid key)
 app.delete('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
   const k = req.apiKey;
-  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
   const myGws = k.my_gateways || [];
   if (!myGws.includes(name)) return res.status(403).json({ error: 'Not your gateway' });
   try {
@@ -1419,20 +1415,21 @@ app.delete('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
     if (!r.ok) return res.status(r.status).json(d);
     const keys = keysLoad();
     keys[k.id].my_gateways = myGws.filter(n => n !== name);
-    // Also remove vpn_clients / wg_clients for this gateway
     if (keys[k.id].vpn_clients) {
       keys[k.id].vpn_clients = keys[k.id].vpn_clients.filter(c => c.gateway !== name);
     }
     if (keys[k.id].wg_clients) {
       const toDelete = keys[k.id].wg_clients.filter(c => c.gateway === name);
       for (const c of toDelete) {
-        try { wgDeleteClient(c.wg_name); } catch(_) {}
+        try { wgDeleteClient(c.wg_name); } catch (_) {}
       }
       keys[k.id].wg_clients = keys[k.id].wg_clients.filter(c => c.gateway !== name);
     }
     keysSave(keys);
     res.json({ ok: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // PUT /api/customer/proxy/:name — change the upstream SOCKS/HTTP proxy on an owned gateway
@@ -1453,7 +1450,9 @@ app.put('/api/customer/proxy/:name', requireApiKey(), async (req, res) => {
     });
     const d = await r.json().catch(() => ({}));
     res.status(r.status).json(d);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET /api/customer/usage — bandwidth used by this customer (total + per VPN tunnel)
@@ -1483,7 +1482,6 @@ app.get('/api/customer/usage', requireApiKey(), (req, res) => {
     };
   }).filter(Boolean);
   const totalBytes = per.reduce((a, x) => a + (x.total_bytes || 0), 0);
-  // Mirror to bandwidth_used_bytes so admin Keys view stays in sync.
   try {
     const keys = keysLoad();
     if (keys[k.id]) {
@@ -1505,7 +1503,7 @@ app.get('/api/customer/usage', requireApiKey(), (req, res) => {
 // GET /api/customer/gateway/:name/ip — check current exit IP through the proxy
 app.get('/api/customer/gateway/:name/ip', requireApiKey(), async (req, res) => {
   const k = req.apiKey;
-  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g,'');
+  const name = req.params.name.replace(/[^a-zA-Z0-9_-]/g, '');
   const myGws = k.my_gateways || [];
   if (!myGws.includes(name)) return res.status(403).json({ error: 'Not your gateway' });
   const gwData = gwLoad();
@@ -1516,13 +1514,12 @@ app.get('/api/customer/gateway/:name/ip', requireApiKey(), async (req, res) => {
     const agent = createAgent(gw.proxy_url);
     const { data } = await axios.get('https://api.ipify.org?format=json', axiosCfg(agent, 10000));
     const ip = data.ip || String(data);
-    // Persist exit_ip if it changed
     if (gw.exit_ip !== ip) {
       const gwData2 = gwLoad();
       if (gwData2[name]) { gwData2[name].exit_ip = ip; gwSave(gwData2); }
     }
     res.json({ ip, changed: gw.exit_ip !== ip });
-  } catch(e) {
+  } catch (e) {
     res.status(502).json({ error: 'Could not reach proxy: ' + e.message });
   }
 });
