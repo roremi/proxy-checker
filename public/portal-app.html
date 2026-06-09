@@ -970,12 +970,18 @@ async function submitAddProxy(){
   const btn=document.getElementById('add-proxy-btn'); btn.disabled=true; btn.textContent='Building tunnel...';
   try {
     const d = await fetchC('/api/customer/proxy',{method:'POST',body:JSON.stringify({proxy_url:url, allow_http_proxy})});
-    _addOvpnContent = d.ovpn||''; _addOvpnName = `${d.gateway||'vpn'}-default.ovpn`;
     const msg = document.getElementById('add-proxy-ok-msg');
-    msg.textContent = `✓ VPN tunnel "${d.gateway}" created! Exit IP: ${d.exit_ip||'(pending)'}`;
+    msg.textContent = d.clients_pending
+      ? `✓ VPN tunnel "${d.gateway}" created. Configs are being generated in the background... Exit IP: ${d.exit_ip||'(pending)'}`
+      : `✓ VPN tunnel "${d.gateway}" created! Exit IP: ${d.exit_ip||'(pending)'}`;
     if(d.ovpn){
+      _addOvpnContent = d.ovpn||''; _addOvpnName = `${d.gateway||'vpn'}-default.ovpn`;
       document.getElementById('add-ovpn-preview').textContent = d.ovpn.slice(0,600)+(d.ovpn.length>600?'\n...(truncated)':'');
       document.getElementById('add-proxy-result').style.display='block';
+      document.getElementById('add-proxy-btn').style.display='none';
+    } else if (d.clients_pending) {
+      document.getElementById('add-proxy-result').style.display='block';
+      document.getElementById('add-ovpn-preview').textContent = 'Config is being generated. Please wait a few seconds and refresh the list if needed.';
       document.getElementById('add-proxy-btn').style.display='none';
     }
     toast('VPN tunnel created!'); loadProxies();

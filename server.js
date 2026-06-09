@@ -140,24 +140,21 @@ function buildProxyUrl(scheme, p) {
 
 // Auto-detect proxy protocol by live-testing SOCKS5 first, then HTTP CONNECT.
 // Returns { scheme, url, exitIp }. Throws on all failures.
-async function detectAndTestProxy(rawInput) {
+async function detectAndTestProxy(rawInput, opts = {}) {
   const p = parseProxyFlex(rawInput);
   if (!p || !p.host || !p.port) throw new Error('Cannot parse proxy');
   // If user specified scheme, honour it only — do not fallback.
   const schemeMatch = String(rawInput).trim().match(/^(socks[45]?h?|http|https):\/\//i);
   const forced = schemeMatch ? schemeMatch[1].toLowerCase().replace('socks4a','socks4').replace('socks5h','socks5') : null;
+  const preferHttp = !!opts.preferHttp;
   const order = forced
     ? [forced === 'http' || forced === 'https' ? 'http' : 'socks5']
-    : ['socks5', 'http'];
-  // Try multiple IP-echo endpoints over both HTTPS and plain HTTP.
-  // Some proxies (port-restricted / cheap residential) only allow port 80,
-  // or block specific hosts (e.g. api.ipify.org). Fall back gracefully.
+    : (preferHttp ? ['http', 'socks5'] : ['socks5', 'http']);
+  // Keep the probe short: SOCKS5 can still try a fallback, but HTTP should
+  // only do a single quick CONNECT test so add latency stays close to SOCKS5.
   const TEST_URLS = [
     'https://api.ipify.org?format=json',
     'http://api.ipify.org/?format=json',
-    'https://ifconfig.me/ip',
-    'http://ifconfig.me/ip',
-    'http://ip-api.com/json/?fields=query',
   ];
   const errs = [];
   for (const sch of order) {
@@ -167,7 +164,7 @@ async function detectAndTestProxy(rawInput) {
       try {
         const agent = sch === 'socks5' ? new SocksProxyAgent(url) : new HttpsProxyAgent(url);
         const r = await axios.get(testUrl, {
-          httpsAgent: agent, httpAgent: agent, timeout: 15000,
+          httpsAgent: agent, httpAgent: agent, timeout: sch === 'http' ? 5000 : 9000,
           responseType: 'text', transformResponse: [d => d],
         });
         const body = typeof r.data === 'string' ? r.data : JSON.stringify(r.data);
@@ -177,6 +174,7 @@ async function detectAndTestProxy(rawInput) {
         if (ip) return { scheme: sch, url, exitIp: ip, parsed: p };
         lastErr = `no IP in response from ${testUrl}`;
       } catch(e) { lastErr = `${testUrl} -> ${e.code || e.message}`; }
+      if (preferHttp && sch === 'http') break;
     }
     errs.push(`${sch}: ${lastErr}`);
   }
@@ -986,6 +984,51 @@ function buildOvpn(gw, certName) {
   return `client\ndev tun\nproto udp\nremote ${SERVER_IP} ${gw.vpn_port}\nresolv-retry infinite\nnobind\npersist-key\npersist-tun\nremote-cert-tls server\ncipher AES-256-GCM\nauth SHA256\ncompress lz4-v2\nverb 3\nkey-direction 1\nblock-ipv6\npull-filter ignore "ifconfig-ipv6"\npull-filter ignore "route-ipv6"\n<ca>\n${ca}\n</ca>\n<cert>\n${certClean}\n</cert>\n<key>\n${key}\n</key>\n<tls-auth>\n${ta}\n</tls-auth>\n`;
 }
 
+function scheduleCustomerDefaultClients(kId, gatewayName, keyPrefix) {
+  setImmediate(() => {
+    try {
+      const gateways = gwLoad();
+      const gw = gateways[gatewayName];
+      if (!gw) return;
+      const certName = `${gatewayName}_${keyPrefix}_default`;
+      execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-req ${certName} nopass 2>&1`, { shell: '/bin/bash' });
+      execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa sign-req client ${certName} 2>&1`, { shell: '/bin/bash' });
+      const keys = keysLoad();
+      if (!keys[kId]) return;
+      if (!keys[kId].vpn_clients) keys[kId].vpn_clients = [];
+      const existsVpn = keys[kId].vpn_clients.some(c => c.gateway === gatewayName && c.client_name === 'default' && c.cert_name === certName);
+      if (!existsVpn) {
+        keys[kId].vpn_clients.push({ gateway: gatewayName, client_name: 'default', cert_name: certName, created_at: new Date().toISOString() });
+      }
+
+      let wgName = '';
+      let wgIp = '';
+      try {
+        wgName = `${gatewayName}_${keyPrefix}_default_wg`.slice(0, 48);
+        const wgCreated = wgCreateClient(wgName, gatewayName);
+        wgIp = wgCreated.ip || '';
+        if (!keys[kId].wg_clients) keys[kId].wg_clients = [];
+        const existsWg = keys[kId].wg_clients.some(c => c.gateway === gatewayName && c.client_name === 'default' && c.wg_name === wgName);
+        if (!existsWg) {
+          keys[kId].wg_clients.push({
+            gateway: gatewayName,
+            client_name: 'default',
+            wg_name: wgName,
+            ip: wgIp,
+            created_at: new Date().toISOString(),
+          });
+        }
+      } catch (e) {
+        console.warn('[customer proxy] background wg client generation failed:', e.message);
+      }
+      keysSave(keys);
+      console.log('[customer proxy] default clients ready for', gatewayName);
+    } catch (e) {
+      console.warn('[customer proxy] background client generation failed:', e.message);
+    }
+  });
+}
+
 // GET /api/customer/gateways — list accessible gateways + this key's VPN clients per gateway
 app.get('/api/customer/gateways', requireApiKey(), (req, res) => {
   const k = req.apiKey;
@@ -1353,52 +1396,18 @@ app.post('/api/customer/proxy', requireApiKey(), async (req, res) => {
     if (!keys[k.id].my_gateways) keys[k.id].my_gateways = [];
     keys[k.id].my_gateways.push(finalName);
     keysSave(keys);
-    // Auto-generate OpenVPN + WireGuard default clients for this key on the new gateway
-    const gateways2 = gwLoad();
-    const gw2 = gateways2[finalName];
-    if (gw2) {
-      const certName = `${finalName}_${keyPrefix}_default`;
-      try {
-        execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa gen-req ${certName} nopass 2>&1`, { shell: '/bin/bash' });
-        execSync(`cd /etc/openvpn/easy-rsa && EASYRSA_BATCH=1 ./easyrsa sign-req client ${certName} 2>&1`, { shell: '/bin/bash' });
-        const ovpn = buildOvpn(gw2, certName);
-        const keys2 = keysLoad();
-        if (!keys2[k.id].vpn_clients) keys2[k.id].vpn_clients = [];
-        keys2[k.id].vpn_clients.push({ gateway: finalName, client_name: 'default', cert_name: certName, created_at: new Date().toISOString() });
-        let wgConf = '';
-        let wgName = '';
-        let wgIp = '';
-        try {
-          wgName = `${finalName}_${keyPrefix}_default_wg`.slice(0, 48);
-          const wgCreated = wgCreateClient(wgName, finalName);
-          wgConf = wgCreated.conf || '';
-          wgIp = wgCreated.ip || '';
-          if (!keys2[k.id].wg_clients) keys2[k.id].wg_clients = [];
-          keys2[k.id].wg_clients.push({
-            gateway: finalName,
-            client_name: 'default',
-            wg_name: wgName,
-            ip: wgIp,
-            created_at: new Date().toISOString(),
-          });
-        } catch (_) {}
-        keysSave(keys2);
-        return res.status(201).json({
-          ok: true,
-          gateway: finalName,
-          vpn_port: d.vpn_port,
-          exit_ip: d.exit_ip,
-          ovpn,
-          cert_name: certName,
-          wg_conf: wgConf || undefined,
-          wg_name: wgName || undefined,
-          wg_ip: wgIp || undefined,
-        });
-      } catch(e) {
-        return res.status(201).json({ ok: true, gateway: finalName, vpn_port: d.vpn_port, exit_ip: d.exit_ip, ovpn_error: e.message });
-      }
-    }
-    res.status(201).json({ ok: true, gateway: finalName, vpn_port: d.vpn_port, exit_ip: d.exit_ip });
+    const certName = `${finalName}_${keyPrefix}_default`;
+    const wgName = `${finalName}_${keyPrefix}_default_wg`.slice(0, 48);
+    scheduleCustomerDefaultClients(k.id, finalName, keyPrefix);
+    return res.status(201).json({
+      ok: true,
+      gateway: finalName,
+      vpn_port: d.vpn_port,
+      exit_ip: d.exit_ip,
+      cert_name: certName,
+      wg_name: wgName,
+      clients_pending: true,
+    });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -2032,7 +2041,7 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
 
     // 1. Auto-detect proxy type (SOCKS5 / HTTP) + live-test (combined step)
     let detected;
-    try { detected = await detectAndTestProxy(proxy_url); }
+    try { detected = await detectAndTestProxy(proxy_url, { preferHttp: allowHttpProxy }); }
     catch(e) { return res.status(400).json({ error: 'Proxy test failed: ' + e.message }); }
     const exitIp = detected.exitIp;
     const normalizedProxy = detected.url;          // canonical URL stored in tun2socks.env
@@ -2580,7 +2589,7 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
   const allowHttpProxy = parseBoolOpt(allow_http_proxy);
   if (!proxy_url) return res.status(400).json({ error: 'Missing proxy_url' });
   let detected;
-  try { detected = await detectAndTestProxy(proxy_url); }
+  try { detected = await detectAndTestProxy(proxy_url, { preferHttp: allowHttpProxy }); }
   catch(e) { return res.status(400).json({ error: 'Proxy test failed: ' + e.message }); }
   const tcpOnlyMode = false;
   const wgSubnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || '';
