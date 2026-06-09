@@ -49,20 +49,22 @@ const jobs       = new Map();   // jobId → { total, done, results }
 const sseClients = new Map();   // jobId → Set<res>
 
 // ── Proxy URL parsing ────────────────────────────────────────────────────────
+function safeDecode(s) { try { return decodeURIComponent(s); } catch(_) { return s; } }
+
 function parseProxyUrl(raw) {
   raw = raw.trim();
   if (!raw) return null;
-  // Already has scheme
-  if (/^(socks[45]?|http|https):\/\//i.test(raw)) return raw;
-  const parts = raw.split(':');
-  // host:port:user:pass — detect by 2nd token being a pure port number.
-  // This handles usernames that contain '@' (e.g. user@zone:pass).
+  const m = raw.match(/^(socks[45]?h?|http|https):\/\/(.+)$/i);
+  const scheme = m ? m[1].toLowerCase() : 'socks5';
+  const body = m ? m[2] : raw;
+  const parts = body.split(':');
+  
   if (parts.length >= 4 && /^\d+$/.test(parts[1])) {
     const [host, port, user, ...passParts] = parts;
-    return `socks5://${encodeURIComponent(user)}:${encodeURIComponent(passParts.join(':'))}@${host}:${port}`;
+    return scheme + '://' + encodeURIComponent(safeDecode(user)) + ':' + encodeURIComponent(safeDecode(passParts.join(':'))) + '@' + host + ':' + port;
   }
-  // host:port
-  if (parts.length === 2) return `socks5://${raw}`;
+  if (m) return raw;
+  if (parts.length === 2) return 'socks5://' + raw;
   return null;
 }
 
@@ -97,22 +99,18 @@ function createAgent(proxyUrl) {
 
 // Flexible proxy parser → returns { host, port, user, pass } or null.
 // Accepts: scheme://[user:pass@]host:port  |  host:port:user:pass  |  host:port
-// NOTE: host:port:user:pass is checked FIRST (before @-split) when the 2nd colon-token
-// is a pure port number. This correctly handles usernames that contain '@' such as
-// 'Thai1994@.custom2' in '1.2.3.4:9093:Thai1994@.custom2:pass'.
 function parseProxyFlex(raw) {
   if (!raw) return null;
   raw = String(raw).trim();
-  // With scheme
   const m = raw.match(/^(?:socks[45]?h?|http|https):\/\/(.+)$/i);
   const body = m ? m[1] : raw;
   const parts = body.split(':');
-  // host:port:user:pass — prioritise when 2nd token is a port number.
-  // Handles usernames/passwords that contain '@' or ':'.
-  if (!m && parts.length >= 4 && /^\d+$/.test(parts[1])) {
-    return { host: parts[0], port: parts[1], user: parts[2], pass: parts.slice(3).join(':') };
+  
+  // Always check pure host:port:user:pass if port is simple digit, even if scheme is present.
+  if (parts.length >= 4 && /^\d+$/.test(parts[1])) {
+    return { host: parts[0], port: parts[1], user: safeDecode(parts[2]), pass: safeDecode(parts.slice(3).join(':')) };
   }
-  // scheme://user:pass@host:port  OR  user:pass@host:port (no scheme)
+  
   const at = body.lastIndexOf('@');
   if (at !== -1) {
     const creds = body.slice(0, at);
@@ -121,15 +119,15 @@ function parseProxyFlex(raw) {
     const hi = hp.indexOf(':');
     if (hi === -1) return null;
     return {
-      user: ci === -1 ? creds : creds.slice(0, ci),
-      pass: ci === -1 ? '' : creds.slice(ci + 1),
+      user: ci === -1 ? safeDecode(creds) : safeDecode(creds.slice(0, ci)),
+      pass: ci === -1 ? '' : safeDecode(creds.slice(ci + 1)),
       host: hp.slice(0, hi),
       port: hp.slice(hi + 1),
     };
   }
-  // host:port:user:pass fallback (no scheme, no @)
+  
   if (parts.length >= 4) {
-    return { host: parts[0], port: parts[1], user: parts[2], pass: parts.slice(3).join(':') };
+    return { host: parts[0], port: parts[1], user: safeDecode(parts[2]), pass: safeDecode(parts.slice(3).join(':')) };
   }
   if (parts.length === 2) return { host: parts[0], port: parts[1], user: '', pass: '' };
   return null;
