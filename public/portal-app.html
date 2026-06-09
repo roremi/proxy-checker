@@ -522,12 +522,12 @@ textarea{resize:vertical}
       <div class="fg">
         <label>Proxy URL</label>
         <input type="text" id="proxy-url-input" placeholder="http://user:pass@1.2.3.4:8080  or  socks5://host:port">
-        <p class="hint">SOCKS5 is recommended. HTTP/HTTPS requires explicit opt-in and runs tunnel in TCP-only mode (UDP/WebRTC blocked).</p>
+        <p class="hint">SOCKS5 is recommended, but HTTP/HTTPS upstream proxies are also supported.</p>
       </div>
       <div class="fg" style="margin-top:-4px">
         <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
           <input type="checkbox" id="add-allow-http" style="width:14px;height:14px">
-          Allow HTTP/HTTPS upstream (TCP-only mode: UDP/WebRTC blocked)
+          Allow HTTP/HTTPS upstream
         </label>
       </div>
       <div id="add-proxy-result" style="display:none">
@@ -563,12 +563,12 @@ textarea{resize:vertical}
       <div class="fg">
         <label>New proxy URL</label>
         <input type="text" id="cp-new" placeholder="socks5://user:pass@host:port  or  http://host:port">
-        <p class="hint">SOCKS5 is recommended. HTTP/HTTPS requires explicit opt-in and runs tunnel in TCP-only mode (UDP/WebRTC blocked).</p>
+        <p class="hint">SOCKS5 is recommended, but HTTP/HTTPS upstream proxies are also supported.</p>
       </div>
       <div class="fg" style="margin-top:-4px">
         <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;cursor:pointer">
           <input type="checkbox" id="cp-allow-http" style="width:14px;height:14px">
-          Allow HTTP/HTTPS upstream (TCP-only mode: UDP/WebRTC blocked)
+          Allow HTTP/HTTPS upstream
         </label>
       </div>
       <div id="cp-result" style="display:none"></div>

@@ -2038,14 +2038,9 @@ app.post('/api/gateways', requireVpnToken, async (req, res) => {
     const normalizedProxy = detected.url;          // canonical URL stored in tun2socks.env
     const proxyScheme = detected.scheme;           // 'socks5' or 'http'
 
-    // SOCKS5 is preferred. HTTP/HTTPS is only allowed with explicit opt-in,
-    // then the gateway is forced into TCP-only mode by blocking forwarded UDP.
-    if (proxyScheme !== 'socks5' && !allowHttpProxy) {
-      return res.status(400).json({
-        error: 'HTTP/HTTPS proxy requires allow_http_proxy=true (gateway will run in TCP-only mode with UDP/WebRTC blocked).'
-      });
-    }
-    const tcpOnlyMode = proxyScheme !== 'socks5';
+    // Keep accepting allow_http_proxy for backward compatibility, but do not
+    // force HTTP/HTTPS upstreams into TCP-only mode.
+    const tcpOnlyMode = false;
 
     // 3. Allocate resources
     const { tableId, vpnIdx, t2sIdx } = gwAllocResources(gateways);
@@ -2587,12 +2582,7 @@ app.put('/api/gateways/:name/proxy', requireVpnToken, async (req, res) => {
   let detected;
   try { detected = await detectAndTestProxy(proxy_url); }
   catch(e) { return res.status(400).json({ error: 'Proxy test failed: ' + e.message }); }
-  if (detected.scheme !== 'socks5' && !allowHttpProxy) {
-    return res.status(400).json({
-      error: 'HTTP/HTTPS proxy requires allow_http_proxy=true (gateway will run in TCP-only mode with UDP/WebRTC blocked).'
-    });
-  }
-  const tcpOnlyMode = detected.scheme !== 'socks5';
+  const tcpOnlyMode = false;
   const wgSubnet = gw.wg_subnet || wgGatewaySubnetFromIndex(gw.vpn_subnet_index) || '';
 
   const gwPath = path.join(GW_DIR, name);

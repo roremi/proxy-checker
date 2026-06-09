@@ -117,8 +117,8 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
   </div>
   <div class="content">
     <div class="warn-box">
-      <strong>Auto-detect:</strong> Supports SOCKS5 by default. HTTP/HTTPS requires explicit opt-in and will run the gateway in <strong>TCP-only mode</strong> (UDP/WebRTC blocked).
-      <strong>For full UDP/DNS support</strong>, use SOCKS5 with UDP ASSOCIATE. L2TP credentials are auto-generated on creation.
+      <strong>Auto-detect:</strong> Supports both SOCKS5 and HTTP/HTTPS upstream proxies.
+      <strong>For best compatibility</strong>, SOCKS5 is still recommended. L2TP credentials are auto-generated on creation.
     </div>
     <div class="card">
       <div class="card-head"><h2>Create New Gateway</h2></div>
@@ -132,7 +132,7 @@ tr:last-child td{border-bottom:none}tr:hover td{background:rgba(17,30,51,.5)}
         <div class="note" style="margin-top:8px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="gw-allow-http" style="width:14px;height:14px">
-            Allow HTTP/HTTPS upstream proxy (TCP-only mode: UDP/WebRTC blocked to prevent leak)
+            Allow HTTP/HTTPS upstream proxy
           </label>
         </div>
         <div class="note">Proxy is live-tested before creation. L2TP credentials are auto-generated with the gateway name.</div>
